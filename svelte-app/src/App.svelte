@@ -1,12 +1,14 @@
 <script>
 	import Folder from "./Folder.svelte";
+	import File from "./File.svelte";
 	import {
 	  apiCreateFolder,
 	  apiMoveFolder,
 	  apiDeleteFolder,
 	  apiUpdateFolder,
 	  apiGetFolderContent
-	} from "./apiFolder.js";
+	} from "./api/folderApi.js";
+	import { apiMoveFile, apiDeleteFile, getDownloadUrl } from "./api/fileApi.js";
 
 	// the one currently displayed
 	const ROOT_FOLDER = {
@@ -16,9 +18,9 @@
 	};
 	const NEW_FOLDER_DEFAULT_NAME = "New Folder";
 
-	const folderOrdering = (folderA, folderB) => {
-	  if (folderA.id > folderB.id) return 1;
-	  else if (folderA.id == folderB.id) return 0;
+	const idOrdering = (a, b) => {
+	  if (a.id > b.id) return 1;
+	  else if (a.id == b.id) return 0;
 	  else return -1;
 	};
 
@@ -29,6 +31,7 @@
 	let addingFolderName = NEW_FOLDER_DEFAULT_NAME;
 
 	let movingFolder = null;
+	let movingFile = null;
 
 	const createFolder = () => {
 	  const newFolder = {
@@ -38,7 +41,7 @@
 	  console.log(newFolder);
 	  apiCreateFolder(newFolder).then(data => {
 	    const newFolderWithId = { ...newFolder, id: data };
-	    folders = [...folders, newFolderWithId].sort(folderOrdering);
+	    folders = [...folders, newFolderWithId].sort(idOrdering);
 	    isAddingFolder = false;
 	    addingFolderName = NEW_FOLDER_DEFAULT_NAME;
 	  });
@@ -48,41 +51,62 @@
 	  console.log("delete folder: " + folderId);
 	  apiDeleteFolder(folderId).then(() => {
 	    apiGetFolderContent().then(content => {
-	      folders = content.folders.sort(folderOrdering);
+	      folders = content.folders.sort(idOrdering);
 	      files = content.files;
 	    });
 	  });
 	};
 
-	const updateName = (prevFolder, name) => {
+	const updateFolderName = (prevFolder, name) => {
 	  console.log("updated name: '" + name + "' on folder id: " + prevFolder.id);
 	  apiUpdateFolder({ ...prevFolder, name }).catch(err => {
 	    console.error("issue when updating name of folder: " + prevFolder.id);
-	    folders = [...folders].sort(folderOrdering); // reinitialize the folders with the original name
+	    folders = [...folders].sort(idOrdering); // reinitialize the folders with its name before update trial
 	  });
 	};
 
 	const openFolder = currentFolderId => {
 	  apiGetFolderContent(currentFolderId).then(data => {
-	    folders = data.folders && data.folders.sort(folderOrdering);
+	    folders = data.folders && data.folders.sort(idOrdering);
 	    files = data.files;
 	    currentFolder = data.currentFolder;
 	  });
 	};
 
-	const startMoveMode = folder => {
+	const redirectToDownload = file => {
+	  window.open(getDownloadUrl(file), "_blank");
+	};
+
+	const startFolderMoveMode = folder => {
 	  movingFolder = folder;
 	};
 
 	const stopMoveMode = () => {
 	  movingFolder = null;
+	  moveFile = null;
 	};
 
 	const moveFolder = () => {
 	  apiMoveFolder(movingFolder.id, currentFolder.id).then(response => {
 	    folders =
-	      folders && folders.length ? [...folders, movingFolder] : [movingFolder];
+	      folders && folders.length
+	        ? [...folders, movingFolder].sort(idOrdering)
+	        : [movingFolder];
 	    movingFolder = null;
+	  });
+	};
+
+	const startFileMoveMode = file => {
+	  movingFile = file;
+	};
+
+	const moveFile = () => {
+	  apiMoveFile(movingFile.id, currentFolder.id).then(response => {
+	    files =
+	      files && files.length
+	        ? [...files, movingFile].sort(idOrdering)
+	        : [movingFile];
+	    movingFile = null;
 	  });
 	};
 
@@ -113,6 +137,14 @@
 	</div>
 {/if}
 
+{#if movingFile}
+	<div class="notif-bar">
+		<span>Drop "{movingFile.name}" here?</span>
+		<button on:click={moveFile}>Confirm</button>
+		<button on:click={stopMoveMode}>Cancel</button>
+	</div>
+{/if}
+
 <div class="folder">
 	{#if isAddingFolder===true}
 		<div>
@@ -127,13 +159,21 @@
 <div>
 	{#each folders || [] as folder}
 		<Folder initialName={folder.name}
-			on:update-name={(event) => updateName(folder, event.detail)}
+			on:update-name={(event) => updateFolderName(folder, event.detail)}
 			on:delete={() => deleteFolder(folder.id)}
 			on:click={() => openFolder(folder.id)}
-			on:move={() => startMoveMode(folder)}/>
+			on:move={() => startFolderMoveMode(folder)}/>
 	{/each}
 </div>
 
+<div>
+	{#each files || [] as file}
+		<File initialName={file.name}
+			on:delete={() => deleteFile(file.id)}
+			on:click={() => redirectToDownload(file)}
+			on:move={() => startFileMoveMode(file)}/>
+	{/each}
+</div>
 
 <style>
 	.notif-bar {

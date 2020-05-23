@@ -1,7 +1,7 @@
-import axios from 'axios';
+import axios from "axios";
+import { targetHost } from "./constants.js";
 
-const hostname = "http://localhost:8080";
-const foldersUrl = `${hostname}/folders`;
+const foldersUrl = `${targetHost}/folders`;
 
 export const apiGetFolderContent = (folderId = undefined) => {
   return new Promise(resolve => {
@@ -44,7 +44,7 @@ export const apiMoveFolder = (folderId, destFolderId) => {
   return new Promise(resolve => {
     axios({
       method: "PUT",
-      url: `${hostname}/MoveFolder/${folderId}?dest=${destFolderId}`
+      url: `${targetHost}/MoveFolder/${folderId}?dest=${destFolderId}`
     }).then(response => {
       resolve();
     });

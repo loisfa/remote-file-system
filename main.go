@@ -25,7 +25,6 @@ type DBFolder struct {
 type DBFile struct {
 	Id          int // readonly
 	Name        string
-	DownloadUrl string // readonly
 	Path        string // readonly
 	ParentId    int
 }
@@ -38,13 +37,11 @@ var int0 = 0
 var photoFile = &DBFile{
 	0,
 	"Profile Picture.png",
-	"http://localhost:8080/dowload-file/0",
 	"temp-files/api.txt",
 	photosFolder.Id}
 var readmeFile = &DBFile{
 	1,
 	"README.md",
-	"http://localhost:8080/dowload-file/1",
 	"temp-files/index.txt",
 	rootFolder.Id}
 
@@ -94,8 +91,7 @@ func DBGetContentIn(folderId int) ApiFolderContent {
 		if file.ParentId == folderId {
 			apiFile := &ApiFile{
 				file.Id,
-				file.Name,
-				file.DownloadUrl}
+				file.Name}
 			apiFiles = append(apiFiles, apiFile)
 		}
 	}
@@ -112,8 +108,7 @@ func DBCreateFolder(name string, parentId int) int {
 
 func DBCreateFile(name string, path string, parentId int) int {
 	fileId := filesAutoIncrementIndex
-	url := fmt.Sprintf("/dowload-file/%d", fileId)
-	dbFilesMap[fileId] = &DBFile{fileId, name, url, path, parentId}
+	dbFilesMap[fileId] = &DBFile{fileId, name, path, parentId}
 	filesAutoIncrementIndex = filesAutoIncrementIndex + 1
 	return fileId
 }
@@ -229,7 +224,6 @@ type ApiFolder struct {
 type ApiFile struct {
 	Id          int    `json:"id"`
 	Name        string `json:"name"`
-	DownloadUrl string `json:"dowloadUrl"` // readonly
 }
 
 type ApiFolderContent struct {
@@ -488,7 +482,7 @@ func main() {
 	// [side effects]
 	r.HandleFunc("/MoveFolder/{folderId:[0-9]+}", MoveFolder).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
 
-	// - dowload selected folder as a .zip (TODO)
+	// - download selected folder as a .zip (TODO)
 
 	/*
 	 * FILES (+sometimes side effects on folders!)

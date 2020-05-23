@@ -39,12 +39,15 @@
 
 <style>
 	.folder {
-	  padding: 0px 0px 0px 0px;
-	  border-bottom: 1px solid rgb(200, 200, 200);
+	  padding: 5px 5px 5px 10px;
+	  margin: 5px 0 5px 0;
+	  border: 1px solid rgb(200, 200, 200);
+	  background: rgb(250, 250, 250);
 	  display: flex;
+	  border-radius: 2px;
 	}
 	.folder:hover {
-	  background: rgb(250, 250, 250);
+	  background: rgb(245, 245, 245);
 	  cursor: pointer;
 	}
 
