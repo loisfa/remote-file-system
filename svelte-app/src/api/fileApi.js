@@ -28,3 +28,18 @@ export const apiMoveFile = (fileId, destFileId) => {
     });
   });
 };
+
+export const apiUploadFile = (jsFile, destFolderId) => {
+  return new Promise(resolve => {
+    const dest = destFolderId || 0;
+    const data = new FormData();
+    data.append('upload', jsFile, jsFile.fileName);
+    axios({
+      method: "POST",
+      data,
+      url: `${targetHost}/UploadFile?dest=${destFolderId}`
+    }).then(response => {
+      resolve();
+    });
+  });
+};

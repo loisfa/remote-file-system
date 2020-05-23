@@ -401,7 +401,7 @@ func MoveFile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func UploadFile(w http.ResponseWriter, r *http.Request) {
+func UploadFile(w http.ResponseWriter, r *http.Request) { // TODO add the id in the response
 	fmt.Println("File Upload Endpoint Hit")
 
 	vars := mux.Vars(r)

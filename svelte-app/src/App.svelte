@@ -1,119 +1,133 @@
 <script>
-	import Folder from "./Folder.svelte";
-	import File from "./File.svelte";
-	import {
-	  apiCreateFolder,
-	  apiMoveFolder,
-	  apiDeleteFolder,
-	  apiUpdateFolder,
-	  apiGetFolderContent
-	} from "./api/folderApi.js";
-	import { apiMoveFile, apiDeleteFile, getDownloadUrl } from "./api/fileApi.js";
+		import Folder from "./Folder.svelte";
+		import File from "./File.svelte";
+		import {
+		  apiCreateFolder,
+		  apiMoveFolder,
+		  apiDeleteFolder,
+		  apiUpdateFolder,
+		  apiGetFolderContent
+		} from "./api/folderApi.js";
+		import {
+		  apiMoveFile,
+		  apiDeleteFile,
+		  apiUploadFile,
+		  getDownloadUrl
+		} from "./api/fileApi.js";
 
-	// the one currently displayed
-	const ROOT_FOLDER = {
-	  name: "",
-	  id: 0,
-	  parentId: undefined
-	};
-	const NEW_FOLDER_DEFAULT_NAME = "New Folder";
+		// the one currently displayed
+		const ROOT_FOLDER = {
+		  name: "",
+		  id: 0,
+		  parentId: undefined
+		};
+		const NEW_FOLDER_DEFAULT_NAME = "New Folder";
 
-	const idOrdering = (a, b) => {
-	  if (a.id > b.id) return 1;
-	  else if (a.id == b.id) return 0;
-	  else return -1;
-	};
+		const idOrdering = (a, b) => {
+		  if (a.id > b.id) return 1;
+		  else if (a.id == b.id) return 0;
+		  else return -1;
+		};
 
-	let currentFolder = ROOT_FOLDER;
-	let folders = [];
-	let files = [];
-	let isAddingFolder = false;
-	let addingFolderName = NEW_FOLDER_DEFAULT_NAME;
+		let currentFolder = ROOT_FOLDER;
+		let folders = [];
+		let files = [];
+		let isAddingFolder = false;
+		let addingFolderName = NEW_FOLDER_DEFAULT_NAME;
 
-	let movingFolder = null;
-	let movingFile = null;
+		let movingFolder = null;
+		let movingFile = null;
+		let file;
 
-	const createFolder = () => {
-	  const newFolder = {
-	    name: addingFolderName,
-	    parentId: currentFolder.parentId || 0
-	  };
-	  console.log(newFolder);
-	  apiCreateFolder(newFolder).then(data => {
-	    const newFolderWithId = { ...newFolder, id: data };
-	    folders = [...folders, newFolderWithId].sort(idOrdering);
-	    isAddingFolder = false;
-	    addingFolderName = NEW_FOLDER_DEFAULT_NAME;
-	  });
-	};
+		const createFolder = () => {
+		  const newFolder = {
+		    name: addingFolderName,
+		    parentId: currentFolder.parentId || 0
+		  };
+		  console.log(newFolder);
+		  apiCreateFolder(newFolder).then(data => {
+		    const newFolderWithId = { ...newFolder, id: data };
+		    folders = [...folders, newFolderWithId].sort(idOrdering);
+		    isAddingFolder = false;
+		    addingFolderName = NEW_FOLDER_DEFAULT_NAME;
+		  });
+		};
 
-	const deleteFolder = folderId => {
-	  console.log("delete folder: " + folderId);
-	  apiDeleteFolder(folderId).then(() => {
-	    apiGetFolderContent().then(content => {
-	      folders = content.folders.sort(idOrdering);
-	      files = content.files;
-	    });
-	  });
-	};
+		const deleteFolder = folderId => {
+		  console.log("delete folder: " + folderId);
+		  apiDeleteFolder(folderId).then(() => {
+		    apiGetFolderContent().then(content => {
+		      folders = content.folders.sort(idOrdering);
+		      files = content.files;
+		    });
+		  });
+		};
 
-	const updateFolderName = (prevFolder, name) => {
-	  console.log("updated name: '" + name + "' on folder id: " + prevFolder.id);
-	  apiUpdateFolder({ ...prevFolder, name }).catch(err => {
-	    console.error("issue when updating name of folder: " + prevFolder.id);
-	    folders = [...folders].sort(idOrdering); // reinitialize the folders with its name before update trial
-	  });
-	};
+		const updateFolderName = (prevFolder, name) => {
+		  console.log("updated name: '" + name + "' on folder id: " + prevFolder.id);
+		  apiUpdateFolder({ ...prevFolder, name }).catch(err => {
+		    console.error("issue when updating name of folder: " + prevFolder.id);
+		    folders = [...folders].sort(idOrdering); // reinitialize the folders with its name before update trial
+		  });
+		};
 
-	const openFolder = currentFolderId => {
-	  apiGetFolderContent(currentFolderId).then(data => {
-	    folders = data.folders && data.folders.sort(idOrdering);
-	    files = data.files;
-	    currentFolder = data.currentFolder;
-	  });
-	};
+		const openFolder = currentFolderId => {
+		  apiGetFolderContent(currentFolderId).then(data => {
+		    folders = data.folders && data.folders.sort(idOrdering);
+		    files = data.files;
+		    currentFolder = data.currentFolder;
+		  });
+		};
 
-	const redirectToDownload = file => {
-	  window.open(getDownloadUrl(file), "_blank");
-	};
+		const redirectToDownload = file => {
+		  window.open(getDownloadUrl(file), "_blank");
+		};
 
-	const startFolderMoveMode = folder => {
-	  movingFolder = folder;
-	};
+		const uploadFile = event => {
+		  const toUploadFiles = event.dataTransfer.files;
+		  toUploadFiles.forEach(toUploadFile => {
+		    apiUploadFile(toUploadFile, currentFolder.id);
+		    // handle the update of the local list
+		  });
+		};
 
-	const stopMoveMode = () => {
-	  movingFolder = null;
-	  moveFile = null;
-	};
+		const startFolderMoveMode = folder => {
+		  movingFolder = folder;
+		};
 
-	const moveFolder = () => {
-	  apiMoveFolder(movingFolder.id, currentFolder.id).then(response => {
-	    folders =
-	      folders && folders.length
-	        ? [...folders, movingFolder].sort(idOrdering)
-	        : [movingFolder];
-	    movingFolder = null;
-	  });
-	};
+		const stopMoveMode = () => {
+		  movingFolder = null;
+		  moveFile = null;
+		};
 
-	const startFileMoveMode = file => {
-	  movingFile = file;
-	};
+		const moveFolder = () => {
+		  apiMoveFolder(movingFolder.id, currentFolder.id).then(response => {
+		    folders =
+		      folders && folders.length
+		        ? [...folders, movingFolder].sort(idOrdering)
+		        : [movingFolder];
+		    movingFolder = null;
+		  });
+		};
 
-	const moveFile = () => {
-	  apiMoveFile(movingFile.id, currentFolder.id).then(response => {
-	    files =
-	      files && files.length
-	        ? [...files, movingFile].sort(idOrdering)
-	        : [movingFile];
-	    movingFile = null;
-	  });
-	};
+		const startFileMoveMode = file => {
+		  movingFile = file;
+		};
 
-	apiGetFolderContent().then(content => {
-	  folders = content.folders;
-	  files = content.files;
-	});
+		const moveFile = () => {
+		  apiMoveFile(movingFile.id, currentFolder.id).then(response => {
+		    files =
+		      files && files.length
+		        ? [...files, movingFile].sort(idOrdering)
+		        : [movingFile];
+		    movingFile = null;
+		  });
+		};
+
+		apiGetFolderContent().then(content => {
+		  folders = content.folders;
+		  files = content.files;
+		});
 </script>
 
 <h1>Remote File System</h1>
@@ -173,6 +187,12 @@
 			on:click={() => redirectToDownload(file)}
 			on:move={() => startFileMoveMode(file)}/>
 	{/each}
+</div>
+
+<div id="drop_zone"
+	on:drop={(event) => {event.preventDefault(); uploadFile(event);}}
+	on:dragover={(event) => event.preventDefault()}>
+  <p>Drag one or more files to this Drop Zone ...</p>
 </div>
 
 <style>
