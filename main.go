@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 )
 
@@ -54,20 +55,28 @@ var foldersAutoIncrementIndex int
 var filesAutoIncrementIndex int
 
 func initDB() {
-	dbFoldersMap[0] = photosFolder
-	dbFoldersMap[1] = summerPhotosFolder
-	dbFilesMap[0] = photoFile
-	dbFilesMap[1] = readmeFile
-
-	foldersAutoIncrementIndex = 2
+	dbFoldersMap[rootFolder.Id] = rootFolder
+	dbFoldersMap[photosFolder.Id] = photosFolder
+	dbFoldersMap[summerPhotosFolder.Id] = summerPhotosFolder
+	foldersAutoIncrementIndex = 3
+	
+	dbFilesMap[photoFile.Id] = photoFile
+	dbFilesMap[readmeFile.Id] = readmeFile
 	filesAutoIncrementIndex = 2
 
 	return
 }
 
 func DBGetContentIn(folderId int) ApiFolderContent {
-	var apiFolders []*ApiFolder
+	currentFolder, _ := dbFoldersMap[folderId]
+	// TODO do something with OK (not found error)
+	
+	var apiCurrentFolder *ApiFolder = &ApiFolder{
+		currentFolder.Id,
+		currentFolder.Name,
+		currentFolder.ParentId}
 
+	var apiFolders []*ApiFolder
 	// TODO with map no need to loop
 	for _, folder := range dbFoldersMap {
 		if folder.ParentId != nil && *(folder.ParentId) == folderId {
@@ -80,7 +89,6 @@ func DBGetContentIn(folderId int) ApiFolderContent {
 	}
 
 	var apiFiles []*ApiFile
-
 	// TODO with map no need to loop
 	for _, file := range dbFilesMap {
 		if file.ParentId == folderId {
@@ -92,7 +100,7 @@ func DBGetContentIn(folderId int) ApiFolderContent {
 		}
 	}
 
-	return ApiFolderContent{apiFolders, apiFiles}
+	return ApiFolderContent{apiCurrentFolder, apiFolders, apiFiles}
 }
 
 func DBCreateFolder(name string, parentId int) int {
@@ -225,6 +233,7 @@ type ApiFile struct {
 }
 
 type ApiFolderContent struct {
+	CurrentFolder *ApiFolder `json:"currentFolder"`
 	Folders []*ApiFolder `json:"folders"` // readonly
 	Files   []*ApiFile   `json:"files"`   // readonly
 }
@@ -473,7 +482,7 @@ func main() {
 
 	// - delete folder and its content
 	// [side effects]
-	r.HandleFunc("/folders/{folderId:[0-9]+}", DeleteFolderAndContent).Methods(http.MethodDelete)
+	r.HandleFunc("/folders/{folderId:[0-9]+}", DeleteFolderAndContent).Methods(http.MethodDelete, http.MethodOptions)
 
 	// - move folder from the current folder to another one (drag and drop, modal)
 	// [side effects]
@@ -497,7 +506,16 @@ func main() {
 	r.HandleFunc("/MoveFile/{fileId:[0-9]+}", MoveFile).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
 
 	http.Handle("/", r)
+	
+	corsMw := mux.CORSMethodMiddleware(r)
+	r.Use(corsMw)
+
+	corsObj := handlers.AllowedOrigins([]string{"*"})
+	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization", 
+		"Accept", "Accept-Language", "Content-Language", "Origin"})
+	methodsOk := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"})
+	
+	http.ListenAndServe(":8080", handlers.CORS(corsObj, headersOk, methodsOk)(r))
 
 	fmt.Println("Server running on port 8080")
-	http.ListenAndServe(":8080", r)
 }
