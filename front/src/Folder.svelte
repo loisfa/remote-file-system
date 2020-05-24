@@ -18,14 +18,14 @@
 
 <div class="folder" on:click={onClick}>
 	{#if isEditing===false}
-		<span class="folder-name center-v">{name}</span>
+		<span class="folder-name center-v">/{name}</span>
 		<button class="center-v m-5" on:click={() => {isEditing = true; event.stopPropagation();} }>
 			Rename
 		</button>
 		<button class="center-v m-5" on:click={(event) => {onClickMove(); event.stopPropagation();}}>
 			Move
 		</button>
-		<button class="delete-button center-v m-5" on:click={() => {onDelete(); event.stopPropagation();} }>
+		<button class="delete-button center-v m-5" on:click={(event) => {onDelete(); event.stopPropagation();} }>
 			Delete
 		</button>
 	{:else}

@@ -16,7 +16,10 @@
 	<button class="center-v m-5" on:click={(event) => {onClickMove(); event.stopPropagation();}}>
 		Move
 	</button>
-	<button class="delete-button center-v m-5" on:click={() => {onDelete(); event.stopPropagation();} }>
+	<button class="delete-button center-v m-5" on:click={(event) => {
+		onDelete(); 
+		event.stopPropagation();
+	}}>
 		Delete
 	</button>
 </div>

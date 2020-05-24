@@ -39,7 +39,7 @@ export const apiUploadFile = (jsFile, destFolderId) => {
       data,
       url: `${targetHost}/UploadFile?dest=${destFolderId}`
     }).then(response => {
-      resolve();
+      resolve(response.data);
     });
   });
 };

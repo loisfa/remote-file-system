@@ -34,15 +34,15 @@ var photosFolder = &DBFolder{1, "Photos", &(rootFolder.Id)}
 var summerPhotosFolder = &DBFolder{2, "Summer", &(photosFolder.Id)}
 
 var int0 = 0
-var photoFile = &DBFile{
+var textFile1 = &DBFile{
 	0,
-	"Profile Picture.png",
-	"temp-files/api.txt",
+	"file1.txt",
+	"temp-files/file1.txt",
 	photosFolder.Id}
-var readmeFile = &DBFile{
+var textFile2 = &DBFile{
 	1,
-	"README.md",
-	"temp-files/index.txt",
+	"file2.txt",
+	"temp-files/file2.txt",
 	rootFolder.Id}
 
 var dbFoldersMap map[int]*DBFolder = make(map[int]*DBFolder)
@@ -57,8 +57,8 @@ func initDB() {
 	dbFoldersMap[summerPhotosFolder.Id] = summerPhotosFolder
 	foldersAutoIncrementIndex = 3
 	
-	dbFilesMap[photoFile.Id] = photoFile
-	dbFilesMap[readmeFile.Id] = readmeFile
+	dbFilesMap[textFile1.Id] = textFile1
+	dbFilesMap[textFile2.Id] = textFile2
 	filesAutoIncrementIndex = 2
 
 	return
@@ -186,8 +186,8 @@ func removeFiles(fileIds []int) {
 	for _, fileId := range fileIds {
 		file, ok := dbFilesMap[fileId]
 		if ok == true {
-			fmt.Println("Deleting file", file.Path)
-			delete(dbFoldersMap, fileId)
+			fmt.Println("Deleting file", file.Path) // TODO: delete the file actually from the file storage? (for now soft delete)
+			delete(dbFilesMap, fileId)
 		}
 	}
 }
@@ -208,6 +208,21 @@ func DBDeleteFolderAndContent(folderId int) error {
 
 	removeFiles(toDeleteFileIds)
 	removeFolders(toDeleteFolderIds)
+
+	return nil
+}
+
+
+func DBDeleteFile(fileId int) error {
+	fmt.Println("deleting file", fileId)
+	_, ok := dbFilesMap[fileId]
+
+	if ok == false {
+		return errors.New("Could not find folder for specified id") // find a way to fire 404
+	}
+
+	toDeleteFileIds := []int{fileId}
+	removeFiles(toDeleteFileIds)
 
 	return nil
 }
@@ -365,7 +380,29 @@ func MoveFolder(w http.ResponseWriter, r *http.Request) {
 
 	err = DBMoveFolder(folderId, destFolderId)
 	if err != nil {
-		http.Error(w, err.Error(), 401)
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func DeleteFile(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	var id *int
+	var idInt int
+	var err error
+	idStr := vars["fileId"]
+	if idInt, err = strconv.Atoi(idStr); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	id = &idInt
+
+	err = DBDeleteFile(*id)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
 		return
 	}
 
@@ -454,49 +491,33 @@ func main() {
 
 	r := mux.NewRouter()
 
-	/*
-	 *  ITEMS
-	 */
-
-	// - get folder content level 1 (folder+files)
-	r.HandleFunc("/folders/{folderId:[0-9]+}", GetFolderContent).Methods(http.MethodGet)
-
-	// - get folders content level 1 (folder+files) at the root of the hierarchy
-	r.HandleFunc("/folders", GetRootFolderContent).Methods(http.MethodGet)
 
 	/*
 	 * FOLDERS
 	 */
 
-	// - create new folder in current folder
+	r.HandleFunc("/folders/{folderId:[0-9]+}", GetFolderContent).Methods(http.MethodGet)
+	r.HandleFunc("/folders", GetRootFolderContent).Methods(http.MethodGet)
+		
 	r.HandleFunc("/folders", CreateFolder).Methods(http.MethodPost)
-
-	// - update folder (name, parentId, access?)
+	
 	r.HandleFunc("/folders/{folderId:[0-9]+}", UpdateFolder).Methods(http.MethodPut)
+	r.HandleFunc("/folders/{folderId:[0-9]+}", DeleteFolderAndContent).Methods(http.MethodDelete, http.MethodOptions) // SEE if can delere methodOptions
 
-	// - delete folder and its content
-	// [side effects]
-	r.HandleFunc("/folders/{folderId:[0-9]+}", DeleteFolderAndContent).Methods(http.MethodDelete, http.MethodOptions)
-
-	// - move folder from the current folder to another one (drag and drop, modal)
-	// [side effects]
 	r.HandleFunc("/MoveFolder/{folderId:[0-9]+}", MoveFolder).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
 
-	// - download selected folder as a .zip (TODO)
+	// TODO download selected folder as a .zip
 
 	/*
-	 * FILES (+sometimes side effects on folders!)
+	 * FILES
 	 */
+	 
+	r.HandleFunc("/files/{fileId:[0-9]+}", DeleteFile).Methods(http.MethodDelete, http.MethodOptions)
 
-	// - download selected file
 	r.HandleFunc("/DownloadFile/{fileId:[0-9]+}", ServeFile).Methods(http.MethodGet)
-
-	// - upload file in current folder
-	// [side effects]
+	
 	r.HandleFunc("/UploadFile", UploadFile).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPost)
 
-	// - move file from current folder to another one (drag and drop, modal)
-	// [side effects]
 	r.HandleFunc("/MoveFile/{fileId:[0-9]+}", MoveFile).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
 
 	http.Handle("/", r)
@@ -504,6 +525,7 @@ func main() {
 	corsMw := mux.CORSMethodMiddleware(r)
 	r.Use(corsMw)
 
+	// TODO: see if can be deleted (in favor of is just above)
 	corsObj := handlers.AllowedOrigins([]string{"*"})
 	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization", 
 		"Accept", "Accept-Language", "Content-Language", "Origin"})

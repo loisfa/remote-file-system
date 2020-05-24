@@ -42,39 +42,38 @@
 		const createFolder = () => {
 		  const newFolder = {
 		    name: addingFolderName,
-		    parentId: currentFolder.parentId || 0
+		    parentId: currentFolder.id || 0
 		  };
 		  console.log(newFolder);
 		  apiCreateFolder(newFolder).then(data => {
 		    const newFolderWithId = { ...newFolder, id: data };
-		    folders = [...folders, newFolderWithId].sort(idOrdering);
+		    folders = folders
+		      ? [...folders, newFolderWithId].sort(idOrdering)
+		      : [newFolderWithId];
 		    isAddingFolder = false;
 		    addingFolderName = NEW_FOLDER_DEFAULT_NAME;
 		  });
 		};
 
 		const deleteFolder = folderId => {
-		  console.log("delete folder: " + folderId);
 		  apiDeleteFolder(folderId).then(() => {
-		    apiGetFolderContent().then(content => {
-		      folders = content.folders.sort(idOrdering);
-		      files = content.files;
+		    apiGetFolderContent(currentFolder && currentFolder.id).then(data => {
+		      folders = data.folders && data.folders.sort(idOrdering);
+		      files = data.files && data.files.sort(idOrdering);
 		    });
 		  });
 		};
 
 		const updateFolderName = (prevFolder, name) => {
-		  console.log("updated name: '" + name + "' on folder id: " + prevFolder.id);
 		  apiUpdateFolder({ ...prevFolder, name }).catch(err => {
-		    console.error("issue when updating name of folder: " + prevFolder.id);
 		    folders = [...folders].sort(idOrdering); // reinitialize the folders with its name before update trial
 		  });
 		};
 
-		const openFolder = currentFolderId => {
-		  apiGetFolderContent(currentFolderId).then(data => {
+		const openFolder = folderId => {
+		  apiGetFolderContent(folderId).then(data => {
 		    folders = data.folders && data.folders.sort(idOrdering);
-		    files = data.files;
+		    files = data.files && data.files.sort(idOrdering);
 		    currentFolder = data.currentFolder;
 		  });
 		};
@@ -85,10 +84,13 @@
 
 		const uploadFile = event => {
 		  const toUploadFiles = event.dataTransfer.files;
-		  toUploadFiles.forEach(toUploadFile => {
-		    apiUploadFile(toUploadFile, currentFolder.id);
-		    // handle the update of the local list
-		  });
+		  console.log(toUploadFiles);
+		  for (let i = 0; i < toUploadFiles.length; i++) {
+		    const toUploadFile = toUploadFiles[i];
+		    apiUploadFile(toUploadFile, currentFolder.id).then(id => {
+		      files = [...files, { id, name: toUploadFile.name }];
+		    });
+		  }
 		};
 
 		const startFolderMoveMode = folder => {
@@ -97,7 +99,7 @@
 
 		const stopMoveMode = () => {
 		  movingFolder = null;
-		  moveFile = null;
+		  movingFile = null;
 		};
 
 		const moveFolder = () => {
@@ -124,9 +126,18 @@
 		  });
 		};
 
-		apiGetFolderContent().then(content => {
-		  folders = content.folders;
-		  files = content.files;
+		const deleteFile = fileId => {
+		  apiDeleteFile(fileId).then(response => {
+		    apiGetFolderContent().then(data => {
+		      folders = data.folders && data.folders.sort(idOrdering);
+		      files = data.files && data.files.sort(idOrdering);
+		    });
+		  });
+		};
+
+		apiGetFolderContent().then(data => {
+		  folders = data.folders && data.folders.sort(idOrdering);
+		  files = data.files && data.files.sort(idOrdering);
 		});
 </script>
 
@@ -189,13 +200,22 @@
 	{/each}
 </div>
 
-<div id="drop_zone"
+<div id="drop-zone"
 	on:drop={(event) => {event.preventDefault(); uploadFile(event);}}
 	on:dragover={(event) => event.preventDefault()}>
   <p>Drag one or more files to this Drop Zone ...</p>
 </div>
 
 <style>
+	#drop-zone {
+	  color: #19b4c9;
+	  border: 2px dashed #19b4c9;
+	  width: auto;
+	  padding: 1em;
+	  margin: 1em;
+	  text-align: center;
+	}
+
 	.notif-bar {
 	  background: rgb(255, 210, 150);
 	  padding: 5px 0 0 15px;
