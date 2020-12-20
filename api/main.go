@@ -20,6 +20,7 @@ type DBFolder struct {
 	Id       int // readonly
 	Name     string
 	ParentId *int // root folder <--> ParentId is nil
+	// TODO isDelete boolean => soft delete
 }
 
 type DBFile struct {
@@ -33,7 +34,6 @@ var rootFolder = &DBFolder{0, "", nil}
 var photosFolder = &DBFolder{1, "Photos", &(rootFolder.Id)}
 var summerPhotosFolder = &DBFolder{2, "Summer", &(photosFolder.Id)}
 
-var int0 = 0
 var textFile1 = &DBFile{
 	0,
 	"file1.txt",
@@ -48,10 +48,20 @@ var textFile2 = &DBFile{
 var dbFoldersMap map[int]*DBFolder = make(map[int]*DBFolder)
 var dbFilesMap map[int]*DBFile = make(map[int]*DBFile)
 
+// For testing purpose
+func GetDbFolderMap() map[int]*DBFolder {
+	return dbFoldersMap
+}
+// For testing purpose
+func GetDbFileMap() map[int]*DBFile {
+	return dbFilesMap
+}
+
 var foldersAutoIncrementIndex int
 var filesAutoIncrementIndex int
 
-func initDB() {
+func InitDB() {
+	// TODO reuse the existing 'createXxx' methods to perform those operations
 	dbFoldersMap[rootFolder.Id] = rootFolder
 	dbFoldersMap[photosFolder.Id] = photosFolder
 	dbFoldersMap[summerPhotosFolder.Id] = summerPhotosFolder
@@ -124,23 +134,23 @@ func DBUpdateFolder(folderId int, name string) error {
 	return nil
 }
 
-func DBMoveFolder(folderId int, parentId *int) error {
+func DBMoveFolder(folderId int, targetParentId *int) error {
 	toUpdateFolder, ok := dbFoldersMap[folderId]
 	if ok == false {
 		return errors.New("Could not find folder for specified id")
 	}
 
-	toUpdateFolder.ParentId = parentId
+	toUpdateFolder.ParentId = targetParentId
 	return nil
 }
 
-func DBMoveFile(fileId int, parentId *int) error {
+func DBMoveFile(fileId int, targetParentId *int) error {
 	toUpdateFile, ok := dbFilesMap[fileId]
 	if ok == false {
 		return errors.New("Could not find file for specified id")
 	}
 
-	toUpdateFile.ParentId = *parentId
+	toUpdateFile.ParentId = *targetParentId
 	return nil
 }
 
@@ -186,14 +196,14 @@ func removeFiles(fileIds []int) {
 	for _, fileId := range fileIds {
 		file, ok := dbFilesMap[fileId]
 		if ok == true {
-			fmt.Println("Deleting file", file.Path) // TODO: delete the file actually from the file storage? (for now soft delete)
+			fmt.Println("Deleting file ", file.Path) // TODO: delete the file actually from the file storage? (for now soft delete)
 			delete(dbFilesMap, fileId)
 		}
 	}
 }
 
 func DBDeleteFolderAndContent(folderId int) error {
-	fmt.Println("deleting db folder (and chidren)", folderId)
+	fmt.Println("Deleting db folder (and chidren)", folderId)
 	_, ok := dbFoldersMap[folderId]
 
 	if ok == false {
@@ -214,7 +224,7 @@ func DBDeleteFolderAndContent(folderId int) error {
 
 
 func DBDeleteFile(fileId int) error {
-	fmt.Println("deleting file", fileId)
+	fmt.Println("Deleting file", fileId)
 	_, ok := dbFilesMap[fileId]
 
 	if ok == false {
@@ -288,7 +298,7 @@ func GetFolderContent(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetRootFolderContent(w http.ResponseWriter, r *http.Request) {
-	apiFolderContent := DBGetContentIn(rootFolder.Id)
+	apiFolderContent := DBGetContentIn(rootFolder.Id) // use the map instead to retrieve root folder
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(apiFolderContent)
 }
@@ -487,10 +497,9 @@ func UploadFile(w http.ResponseWriter, r *http.Request) { // TODO add the id in 
 }
 
 func main() {
-	initDB()
+	InitDB()
 
 	r := mux.NewRouter()
-
 
 	/*
 	 * FOLDERS

@@ -2,12 +2,12 @@
 
 ## Requirements
 - GoLang
-- NodsJS 10+
+- NodesJS 10+
 
 ## Start the app
 ### API
 Inside /api, ```go run main.go```
-Lanches a golang server on http://localhost:8080
+Launches a golang server on http://localhost:8080
 
 NB: 
 - main.go is a (long) single file for development reasons, could not develop properly on VSCOde with multiple golang files.
