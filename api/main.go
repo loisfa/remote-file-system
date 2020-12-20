@@ -5,7 +5,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -14,228 +13,9 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+
+	"github.com/loisfa/remote-file-system/api/fsmanager"
 )
-
-type DBFolder struct {
-	Id       int // readonly
-	Name     string
-	ParentId *int // root folder <--> ParentId is nil
-	// TODO isDelete boolean => soft delete
-}
-
-type DBFile struct {
-	Id          int // readonly
-	Name        string
-	Path        string // readonly
-	ParentId    int
-}
-
-var rootFolder = &DBFolder{0, "", nil}
-var photosFolder = &DBFolder{1, "Photos", &(rootFolder.Id)}
-var summerPhotosFolder = &DBFolder{2, "Summer", &(photosFolder.Id)}
-
-var textFile1 = &DBFile{
-	0,
-	"file1.txt",
-	"temp-files/file1.txt",
-	photosFolder.Id}
-var textFile2 = &DBFile{
-	1,
-	"file2.txt",
-	"temp-files/file2.txt",
-	rootFolder.Id}
-
-var dbFoldersMap map[int]*DBFolder = make(map[int]*DBFolder)
-var dbFilesMap map[int]*DBFile = make(map[int]*DBFile)
-
-// For testing purpose
-func GetDbFolderMap() map[int]*DBFolder {
-	return dbFoldersMap
-}
-// For testing purpose
-func GetDbFileMap() map[int]*DBFile {
-	return dbFilesMap
-}
-
-var foldersAutoIncrementIndex int
-var filesAutoIncrementIndex int
-
-func InitDB() {
-	// TODO reuse the existing 'createXxx' methods to perform those operations
-	dbFoldersMap[rootFolder.Id] = rootFolder
-	dbFoldersMap[photosFolder.Id] = photosFolder
-	dbFoldersMap[summerPhotosFolder.Id] = summerPhotosFolder
-	foldersAutoIncrementIndex = 3
-	
-	dbFilesMap[textFile1.Id] = textFile1
-	dbFilesMap[textFile2.Id] = textFile2
-	filesAutoIncrementIndex = 2
-
-	return
-}
-
-func DBGetContentIn(folderId int) ApiFolderContent {
-	currentFolder, _ := dbFoldersMap[folderId]
-	// TODO do something with OK (not found error)
-	
-	var apiCurrentFolder *ApiFolder = &ApiFolder{
-		currentFolder.Id,
-		currentFolder.Name,
-		currentFolder.ParentId}
-
-	var apiFolders []*ApiFolder
-	// TODO with map no need to loop
-	for _, folder := range dbFoldersMap {
-		if folder.ParentId != nil && *(folder.ParentId) == folderId {
-			apiFolder := &ApiFolder{
-				folder.Id,
-				folder.Name,
-				&folderId}
-			apiFolders = append(apiFolders, apiFolder)
-		}
-	}
-
-	var apiFiles []*ApiFile
-	// TODO with map no need to loop
-	for _, file := range dbFilesMap {
-		if file.ParentId == folderId {
-			apiFile := &ApiFile{
-				file.Id,
-				file.Name}
-			apiFiles = append(apiFiles, apiFile)
-		}
-	}
-
-	return ApiFolderContent{apiCurrentFolder, apiFolders, apiFiles}
-}
-
-func DBCreateFolder(name string, parentId int) int {
-	folderId := foldersAutoIncrementIndex
-	dbFoldersMap[folderId] = &DBFolder{folderId, name, &parentId}
-	foldersAutoIncrementIndex = foldersAutoIncrementIndex + 1
-	return folderId
-}
-
-func DBCreateFile(name string, path string, parentId int) int {
-	fileId := filesAutoIncrementIndex
-	dbFilesMap[fileId] = &DBFile{fileId, name, path, parentId}
-	filesAutoIncrementIndex = filesAutoIncrementIndex + 1
-	return fileId
-}
-
-func DBUpdateFolder(folderId int, name string) error {
-	toUpdateFolder, ok := dbFoldersMap[folderId]
-
-	if ok == false {
-		return errors.New("Could not find folder for specified id")
-	}
-
-	toUpdateFolder.Name = name
-	return nil
-}
-
-func DBMoveFolder(folderId int, targetParentId *int) error {
-	toUpdateFolder, ok := dbFoldersMap[folderId]
-	if ok == false {
-		return errors.New("Could not find folder for specified id")
-	}
-
-	toUpdateFolder.ParentId = targetParentId
-	return nil
-}
-
-func DBMoveFile(fileId int, targetParentId *int) error {
-	toUpdateFile, ok := dbFilesMap[fileId]
-	if ok == false {
-		return errors.New("Could not find file for specified id")
-	}
-
-	toUpdateFile.ParentId = *targetParentId
-	return nil
-}
-
-// could use goroutines with recursive?
-func getContentToDelete(folderId int) (toDeleteFolderIds []int, toDeleteFileIds []int) {
-
-	toDeleteFolderIds = []int{}
-
-	toDeleteFileIds = []int{}
-
-	for _, folder := range dbFoldersMap {
-		if folder.ParentId != nil && *(folder.ParentId) == folderId {
-			toDeleteFolderIds = append(toDeleteFolderIds, folder.Id)
-			break
-		}
-	}
-
-	for _, file := range dbFilesMap {
-		if file.ParentId == folderId {
-			toDeleteFileIds = append(toDeleteFileIds, file.Id)
-			break
-		}
-	}
-
-	var innerToDeleteFolderIds, innerToDeleteFileIds []int
-	for _, id := range toDeleteFolderIds {
-		innerToDeleteFolderIds, innerToDeleteFileIds = getContentToDelete(id)
-	}
-
-	toDeleteFolderIds = append(toDeleteFolderIds, innerToDeleteFolderIds...)
-	toDeleteFileIds = append(toDeleteFileIds, innerToDeleteFileIds...)
-
-	return toDeleteFolderIds, toDeleteFileIds
-}
-
-func removeFolders(folderIds []int) {
-	for _, folderId := range folderIds {
-		delete(dbFoldersMap, folderId)
-	}
-}
-
-func removeFiles(fileIds []int) {
-	for _, fileId := range fileIds {
-		file, ok := dbFilesMap[fileId]
-		if ok == true {
-			fmt.Println("Deleting file ", file.Path) // TODO: delete the file actually from the file storage? (for now soft delete)
-			delete(dbFilesMap, fileId)
-		}
-	}
-}
-
-func DBDeleteFolderAndContent(folderId int) error {
-	fmt.Println("Deleting db folder (and chidren)", folderId)
-	_, ok := dbFoldersMap[folderId]
-
-	if ok == false {
-		return errors.New("Could not find folder for specified id")
-	}
-
-	toDeleteFolderIds, toDeleteFileIds := getContentToDelete(folderId)
-	toDeleteFolderIds = append(toDeleteFolderIds, folderId)
-
-	fmt.Println("Folders to remove", len(toDeleteFolderIds))
-	fmt.Println("Files to remove", len(toDeleteFileIds))
-
-	removeFiles(toDeleteFileIds)
-	removeFolders(toDeleteFolderIds)
-
-	return nil
-}
-
-
-func DBDeleteFile(fileId int) error {
-	fmt.Println("Deleting file", fileId)
-	_, ok := dbFilesMap[fileId]
-
-	if ok == false {
-		return errors.New("Could not find folder for specified id") // find a way to fire 404
-	}
-
-	toDeleteFileIds := []int{fileId}
-	removeFiles(toDeleteFileIds)
-
-	return nil
-}
 
 type ApiFolder struct {
 	Id       int    `json:"id"` // readonly
@@ -261,6 +41,43 @@ func hasAccess(userId int, fileId string) bool {
 	return true // TODO
 }
 
+func DBGetContentIn(folderId int) ApiFolderContent {
+	folderIdToFolderMap := fsmanager.GetDbFolderMap()
+	currentFolder, _ := folderIdToFolderMap[folderId]
+	// TODO do something with OK (not found error)
+	
+	var apiCurrentFolder *ApiFolder = &ApiFolder{
+		currentFolder.Id,
+		currentFolder.Name,
+		currentFolder.ParentId}
+
+	var apiFolders []*ApiFolder
+	// TODO with map no need to loop
+	for _, folder := range folderIdToFolderMap {
+		if folder.ParentId != nil && *(folder.ParentId) == folderId {
+			apiFolder := &ApiFolder{
+				folder.Id,
+				folder.Name,
+				&folderId}
+			apiFolders = append(apiFolders, apiFolder)
+		}
+	}
+	
+	fileIdToFileMap := fsmanager.GetDbFileMap()
+	var apiFiles []*ApiFile
+	// TODO with map no need to loop
+	for _, file := range fileIdToFileMap {
+		if file.ParentId == folderId {
+			apiFile := &ApiFile{
+				file.Id,
+				file.Name}
+			apiFiles = append(apiFiles, apiFile)
+		}
+	}
+
+	return ApiFolderContent{apiCurrentFolder, apiFolders, apiFiles}
+}
+
 func ServeFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
@@ -271,7 +88,8 @@ func ServeFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	file := dbFilesMap[fileId]
+	fileIdToFileMap := fsmanager.GetDbFileMap()
+	file := fileIdToFileMap[fileId]
 
 	if file != nil {
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", file.Name))
@@ -298,7 +116,7 @@ func GetFolderContent(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetRootFolderContent(w http.ResponseWriter, r *http.Request) {
-	apiFolderContent := DBGetContentIn(rootFolder.Id) // use the map instead to retrieve root folder
+	apiFolderContent := DBGetContentIn(0) // 0 magic number! TODO use the map instead to retrieve root folder
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(apiFolderContent)
 }
@@ -311,7 +129,7 @@ func CreateFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := DBCreateFolder(f.Name, *(f.ParentId))
+	id := fsmanager.DBCreateFolder(f.Name, *(f.ParentId))
 	w.WriteHeader(http.StatusCreated)
 	fmt.Fprintf(w, strconv.Itoa(id))
 }
@@ -336,7 +154,7 @@ func UpdateFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = DBUpdateFolder(*id, f.Name)
+	err = fsmanager.DBUpdateFolder(*id, f.Name)
 	if err != nil {
 		http.Error(w, err.Error(), 500) // TODO improve
 		return
@@ -358,7 +176,7 @@ func DeleteFolderAndContent(w http.ResponseWriter, r *http.Request) {
 	}
 	id = &idInt
 
-	err = DBDeleteFolderAndContent(*id)
+	err = fsmanager.DBDeleteFolderAndContent(*id)
 	if err != nil {
 		http.Error(w, err.Error(), 401)
 		return
@@ -388,7 +206,7 @@ func MoveFolder(w http.ResponseWriter, r *http.Request) {
 	destFolderId = &destFolderIdInt
 	fmt.Println("destFolderId", destFolderId)
 
-	err = DBMoveFolder(folderId, destFolderId)
+	err = fsmanager.DBMoveFolder(folderId, destFolderId)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -410,7 +228,7 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	id = &idInt
 
-	err = DBDeleteFile(*id)
+	err = fsmanager.DBDeleteFile(*id)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -439,7 +257,7 @@ func MoveFile(w http.ResponseWriter, r *http.Request) {
 	}
 	destFolderId = &destFolderIdInt
 
-	err = DBMoveFile(fileId, destFolderId)
+	err = fsmanager.DBMoveFile(fileId, destFolderId)
 	if err != nil {
 		http.Error(w, err.Error(), 401)
 		return
@@ -491,13 +309,13 @@ func UploadFile(w http.ResponseWriter, r *http.Request) { // TODO add the id in 
 
 	tempFile.Write(fileBytes)
 
-	fileId := DBCreateFile(handler.Filename, tempFile.Name(), destFolderId)
+	fileId := fsmanager.DBCreateFile(handler.Filename, tempFile.Name(), destFolderId)
 	w.WriteHeader(http.StatusCreated)
 	fmt.Fprintf(w, strconv.Itoa(fileId))
 }
 
 func main() {
-	InitDB()
+	fsmanager.InitDB()
 
 	r := mux.NewRouter()
 
