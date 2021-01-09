@@ -19,7 +19,7 @@
 <div class="folder" on:click={onClick}>
 	{#if isEditing===false}
 		<span class="folder-name center-v">/{name}</span>
-		<button class="center-v m-5" on:click={() => {isEditing = true; event.stopPropagation();} }>
+		<button class="center-v m-5" on:click={(event) => {isEditing = true; event.stopPropagation();} }>
 			Rename
 		</button>
 		<button class="center-v m-5" on:click={(event) => {onClickMove(); event.stopPropagation();}}>
@@ -30,7 +30,7 @@
 		</button>
 	{:else}
 		<input on:click={(event) => event.stopPropagation()} bind:value={name}>
-		<button on:click={() => {isEditing = false; onUpdateName(); event.stopPropagation();} }>
+		<button on:click={(event) => {isEditing = false; onUpdateName(); event.stopPropagation();} }>
 			Validate
 		</button>
 	{/if}
