@@ -17,6 +17,7 @@ import (
 	"github.com/loisfa/remote-file-system/api/fsmanager"
 )
 
+// Rename by FolderDTO?? (same for other Api* models) 
 type ApiFolder struct {
 	Id       int    `json:"id"` // readonly
 	Name     string `json:"name"`
@@ -41,6 +42,7 @@ func hasAccess(userId int, fileId string) bool {
 	return true // TODO
 }
 
+// TODO why upper case? Is not exposed outside
 func DBGetContentIn(folderId int) ApiFolderContent {
 	folderIdToFolderMap := fsmanager.GetDbFolderMap()
 	currentFolder, _ := folderIdToFolderMap[folderId]
@@ -314,10 +316,16 @@ func UploadFile(w http.ResponseWriter, r *http.Request) { // TODO add the id in 
 	fmt.Fprintf(w, strconv.Itoa(fileId))
 }
 
+func healthCheckStatusOK(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func main() {
 	fsmanager.InitDB()
 
 	r := mux.NewRouter()
+
+	r.HandleFunc("/health-check", healthCheckStatusOK).Methods(http.MethodGet)
 
 	/*
 	 * FOLDERS
