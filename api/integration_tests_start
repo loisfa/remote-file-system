@@ -1,0 +1,5 @@
+#! /bin/bash
+
+echo "starting integration tests"
+
+python3 integration_tests.tests
