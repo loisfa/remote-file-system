@@ -43,26 +43,29 @@ func hasAccess(userId int, fileId string) bool {
 }
 
 // TODO why upper case? Is not exposed outside
-func DBGetContentIn(folderId int) ApiFolderContent {
-	folderIdToFolderMap := fsmanager.GetDbFolderMap()
-	currentFolder, _ := folderIdToFolderMap[folderId]
-	// TODO do something with OK (not found error)
+func GetContentIn(folderId int) (*ApiFolderContent, error) {
+	currentFolder, err := fsmanager.DBGetFolder(folderId)
+	if err != nil {
+		return nil, err
+	}
 	
 	var apiCurrentFolder *ApiFolder = &ApiFolder{
 		currentFolder.Id,
 		currentFolder.Name,
 		currentFolder.ParentId}
 
-	var apiFolders []*ApiFolder
-	// TODO with map no need to loop
-	for _, folder := range folderIdToFolderMap {
-		if folder.ParentId != nil && *(folder.ParentId) == folderId {
-			apiFolder := &ApiFolder{
-				folder.Id,
-				folder.Name,
-				&folderId}
-			apiFolders = append(apiFolders, apiFolder)
+	subFolders, err := fsmanager.DBGetFoldersIn(folderId)
+	if err != nil {
+			return nil, err
 		}
+
+	var apiFolders []*ApiFolder
+	for _, folder := range subFolders {
+		apiFolder := &ApiFolder{
+			folder.Id,
+			folder.Name,
+			&folderId}
+		apiFolders = append(apiFolders, apiFolder)
 	}
 	
 	fileIdToFileMap := fsmanager.GetDbFileMap()
@@ -77,7 +80,7 @@ func DBGetContentIn(folderId int) ApiFolderContent {
 		}
 	}
 
-	return ApiFolderContent{apiCurrentFolder, apiFolders, apiFiles}
+	return &ApiFolderContent{apiCurrentFolder, apiFolders, apiFiles}, nil
 }
 
 func ServeFile(w http.ResponseWriter, r *http.Request) {
@@ -111,14 +114,27 @@ func GetFolderContent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	apiFolderContent := DBGetContentIn(folderId)
 
+	apiFolderContent, err := GetContentIn(folderId)
+	if (err != nil) {
+		http.Error(w, err.Error(), 404)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(apiFolderContent)
 }
 
 func GetRootFolderContent(w http.ResponseWriter, r *http.Request) {
-	apiFolderContent := DBGetContentIn(0) // 0 magic number! TODO use the map instead to retrieve root folder
+	apiFolderContent, err := GetContentIn(0) // 0 magic number! TODO use the map instead to retrieve root folder
+
+	if (err != nil) {
+		http.Error(w, err.Error(), 404)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(apiFolderContent)
 }
@@ -180,7 +196,7 @@ func DeleteFolderAndContent(w http.ResponseWriter, r *http.Request) {
 
 	err = fsmanager.DBDeleteFolderAndContent(*id)
 	if err != nil {
-		http.Error(w, err.Error(), 401)
+		http.Error(w, err.Error(), 400)
 		return
 	}
 
@@ -261,7 +277,7 @@ func MoveFile(w http.ResponseWriter, r *http.Request) {
 
 	err = fsmanager.DBMoveFile(fileId, destFolderId)
 	if err != nil {
-		http.Error(w, err.Error(), 401)
+		http.Error(w, err.Error(), 400)
 		return
 	}
 

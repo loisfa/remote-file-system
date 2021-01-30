@@ -40,11 +40,12 @@ var textFile2 = &DBFile{
 var dbFoldersMap map[int]*DBFolder = make(map[int]*DBFolder)
 var dbFilesMap map[int]*DBFile = make(map[int]*DBFile)
 
-// For testing purpose
+// public for testing purpose
 func GetDbFolderMap() map[int]*DBFolder {
 	return dbFoldersMap
 }
-// For testing purpose
+
+// public for testing purpose
 func GetDbFileMap() map[int]*DBFile {
 	return dbFilesMap
 }
@@ -64,6 +65,30 @@ func InitDB() {
 	filesAutoIncrementIndex = 2
 
 	return
+}
+
+func DBGetFolder(folderId int) (*DBFolder, error) {
+	folder := dbFoldersMap[folderId]
+	if (folder == nil) {
+		return nil, errors.New("Could not find folder for specified id")
+	}
+
+	return folder , nil
+}
+
+func DBGetFoldersIn(folderId int) ([]*DBFolder, error) {
+	folder := dbFoldersMap[folderId]
+	if (folder == nil) {
+		return nil, errors.New("Could not find folder for specified id")
+	}
+
+	var folders []*DBFolder
+	for _, folder := range dbFoldersMap {
+		if folder.ParentId != nil && *(folder.ParentId) == folderId {
+			folders = append(folders, folder)
+		}
+	}
+	return folders, nil
 }
 
 func DBCreateFolder(name string, parentId int) int {
@@ -92,6 +117,10 @@ func DBUpdateFolder(folderId int, name string) error {
 }
 
 func DBMoveFolder(folderId int, targetParentId *int) error {
+	if folderId == rootFolder.Id {
+		return errors.New("Illegal Operation: trying to move root folder")
+	}
+
 	toUpdateFolder, ok := dbFoldersMap[folderId]
 	if ok == false {
 		return errors.New("Could not find folder for specified id")
@@ -103,6 +132,7 @@ func DBMoveFolder(folderId int, targetParentId *int) error {
 
 func DBMoveFile(fileId int, targetParentId *int) error {
 	toUpdateFile, ok := dbFilesMap[fileId]
+
 	if ok == false {
 		return errors.New("Could not find file for specified id")
 	}
@@ -160,6 +190,10 @@ func removeFiles(fileIds []int) {
 }
 
 func DBDeleteFolderAndContent(folderId int) error {
+	if (folderId == rootFolder.Id) {
+		return errors.New("Illegal Operation: trying to delete root folder.")
+	}
+
 	fmt.Println("Deleting db folder (and chidren)", folderId)
 	_, ok := dbFoldersMap[folderId]
 
