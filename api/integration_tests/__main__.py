@@ -1,8 +1,14 @@
+import os
 import requests
 import json
+import time
+import math
+import cgi
 from model import FolderDTO, FileDTO
 
 # TODO think of using env variables
+# TODO do one extra level of depth on folder to ensure recursive delete works 
+# TODO the file is deleted once the folder is deleted
 PORT=8080
 ROOT_URL="http://localhost:" + str(PORT)
 
@@ -117,5 +123,54 @@ else:
 # Ensures folder 2 (subfolder of folder 1) does not exist anymore
 response = session.get(ROOT_URL + "/folders/" + str(created_folder_id))
 assert response.status_code == 404, "Wrong http code received on retrieve deleted folder 2: " + str(response.status_code)
+
+
+
+
+epoch_seconds = math.floor(time.time())
+tmp_path = 'tmp-' + str(epoch_seconds)
+tmp_files_path = tmp_path + '/files'
+
+try:
+    os.makedirs(tmp_files_path)
+except OSError as err:
+    print("OS error: {0}".format(err))
+except:
+    print("Unexpected error:", sys.exc_info()[0])
+    raise
+
+file1_name = 'temp_file_1.txt'
+file1_path = tmp_files_path + '/' + file1_name
+file1 = open(file1_path, "w+")
+file1.write("Text file 1: this is the text.\n")
+file1.close()
+
+# UPLOAD A FILE IN ROOT FOLDER
+response = session.post(
+    ROOT_URL + "/UploadFile?dest=" + str(root_folder_id), 
+    files = { 'upload': open(file1_path, 'rb') })
+assert response.status_code == 201, "Wrong http code received on create file in root folder: " + str(response.status_code)
+body = json.loads(response.text)
+uploaded_file1_id = body
+# Ensures the file is part of the root folder content
+response = session.get(ROOT_URL + "/DownloadFile/" + str(uploaded_file1_id))
+assert response.status_code == 200, "Wrong http code received on download uploaded file: " + str(response.status_code)
+headers = response.headers['Content-Disposition']
+value, params = cgi.parse_header(headers)
+retrieved_filename = params['filename']
+assert retrieved_filename == file1_name, "Wrong file name for downloaded file: " + retrieved_filename
+assert response.content == open(file1.name, 'rb').read(), "Wrong content for the downloaded file: " + str(response.content) 
+# Download the file and ensure the content corresponds
+
+# MOVE FILE FROM ROOT FOLDER TO ANOTHER FOLDER
+# Ensure the file is part of the folder content
+# Download the file and ensure the content corresponds
+
+# DELETE THE FILE
+
+
+os.remove(file1.name)
+os.rmdir(tmp_files_path)
+os.rmdir(tmp_path)
 
 print("Integration tests finished successfully.")

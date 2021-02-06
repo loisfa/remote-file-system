@@ -299,7 +299,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) { // TODO add the id in 
 
 	// 10 << 20 specifies a maximum upload of 10 MB files.
 	r.ParseMultipartForm(10 << 20)
-	file, handler, err := r.FormFile("upload")
+	file, handler, err := r.FormFile("upload") // TODO rename 'upload' -> 'file', the latter seems more conventional
 	if err != nil {
 		fmt.Println("Error Retrieving the File")
 		fmt.Println(err)
@@ -311,7 +311,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) { // TODO add the id in 
 
 	exts := strings.Split(handler.Filename, ".")
 	ext := exts[len(exts)-1]
-	tempFile, err := ioutil.TempFile("temp-files", fmt.Sprintf("upload-*.%s", ext))
+	tempFile, err := ioutil.TempFile("tmp-files", fmt.Sprintf("upload-*.%s", ext)) // TODO use const instead of these magic strings
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
