@@ -93,14 +93,14 @@ func ServeFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	fileIdToFileMap := fsmanager.GetDbFileMap()
+	fileIdToFileMap := fsmanager.GetDbFileMap() // TODO get rid of this map here
 	file := fileIdToFileMap[fileId]
 
 	if file != nil {
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", file.Name))
 		http.ServeFile(w, r, file.Path)
 	} else {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		http.Error(w, "File not found", http.StatusNotFound)
 	}
 }
 

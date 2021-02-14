@@ -124,9 +124,6 @@ else:
 response = session.get(ROOT_URL + "/folders/" + str(created_folder_id))
 assert response.status_code == 404, "Wrong http code received on retrieve deleted folder 2: " + str(response.status_code)
 
-
-
-
 epoch_seconds = math.floor(time.time())
 tmp_path = 'tmp-' + str(epoch_seconds)
 tmp_files_path = tmp_path + '/files'
@@ -153,6 +150,16 @@ assert response.status_code == 201, "Wrong http code received on create file in 
 body = json.loads(response.text)
 uploaded_file1_id = body
 # Ensures the file is part of the root folder content
+response = session.get(ROOT_URL + "/folders")
+body = json.loads(response.text)
+files = body['files']
+found_created_file = False
+for file in files:
+    if str(file['id']) == str(uploaded_file1_id):
+        found_created_file = True
+        assert file['name'] == file1_name, "The name of the file just uploaded is wrong"
+assert found_created_file == True, "Could not find the file just uploaded"
+# Download the file and ensure the content corresponds
 response = session.get(ROOT_URL + "/DownloadFile/" + str(uploaded_file1_id))
 assert response.status_code == 200, "Wrong http code received on download uploaded file: " + str(response.status_code)
 headers = response.headers['Content-Disposition']
@@ -160,14 +167,62 @@ value, params = cgi.parse_header(headers)
 retrieved_filename = params['filename']
 assert retrieved_filename == file1_name, "Wrong file name for downloaded file: " + retrieved_filename
 assert response.content == open(file1.name, 'rb').read(), "Wrong content for the downloaded file: " + str(response.content) 
-# Download the file and ensure the content corresponds
 
 # MOVE FILE FROM ROOT FOLDER TO ANOTHER FOLDER
+# Create a folder inside the root folder
+to_create_folder_3 = FolderDTO(None, "Folder 3", root_folder_id)
+response = session.post(ROOT_URL + "/folders", to_create_folder.toJson())
+assert response.status_code == 201, "Wrong http code received on create new folder in root folder"
+created_folder_3_id = response.text
+# Move file from root to folder 3
+response = session.put(ROOT_URL + "/MoveFile/" + str(uploaded_file1_id) + "?dest=" + str(created_folder_3_id))
+assert response.status_code == 204, "Wrong http code received on move file: " + str (response.status_code)
 # Ensure the file is part of the folder content
+response = session.get(ROOT_URL + "/folders/" + created_folder_3_id)
+body = json.loads(response.text)
+files = body['files']
+found_created_file = False
+for file in files:
+    if str(file['id']) == str(uploaded_file1_id):
+        found_created_file = True
+        assert file['name'] == file1_name, "The name of the file just uploaded is wrong"
+assert found_created_file == True, "Could not find the file just uploaded"
+# Ensure the file is NOT anymore in the root folder
+response = session.get(ROOT_URL + "/folders")
+body = json.loads(response.text)
+files = body['files']
+if files != None:
+    found_created_file = False
+    for file in files:
+        if str(file['id']) == str(uploaded_file1_id):
+            found_created_file = True
+    assert found_created_file == False, "The moved file is still in the origin folder (=duplicate)"
 # Download the file and ensure the content corresponds
+response = session.get(ROOT_URL + "/DownloadFile/" + str(uploaded_file1_id))
+assert response.status_code == 200, "Wrong http code received on download uploaded file: " + str(response.status_code)
+headers = response.headers['Content-Disposition']
+value, params = cgi.parse_header(headers)
+retrieved_filename = params['filename']
+assert retrieved_filename == file1_name, "Wrong file name for downloaded file: " + retrieved_filename
+assert response.content == open(file1.name, 'rb').read(), "Wrong content for the downloaded file: " + str(response.content) 
 
 # DELETE THE FILE
-
+response = session.delete(ROOT_URL + "/files/" + str(uploaded_file1_id))
+assert response.status_code == 204, "Wrong http code received on delte file: " + str(response.status_code)
+# Ensure the file is NOT part of the folder anymore
+response = session.get(ROOT_URL + "/folders/" + created_folder_3_id)
+body = json.loads(response.text)
+files = body['files']
+if files != None:
+    found_created_file = False
+    for file in files:
+        if str(file['id']) == str(uploaded_file1_id):
+            found_created_file = True
+    assert found_created_file == False, "The deleted file still appears inside the folder"
+# Ensure the file cannot be lookup
+print("downloading file")
+response = session.get(ROOT_URL + "/DownloadFile/" + str(uploaded_file1_id))
+assert response.status_code == 404, "Wrong http code received on trying to access deleted file: " + str(response.status_code)
 
 os.remove(file1.name)
 os.rmdir(tmp_files_path)

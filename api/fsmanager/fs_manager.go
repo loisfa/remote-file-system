@@ -183,7 +183,7 @@ func removeFiles(fileIds []int) {
 	for _, fileId := range fileIds {
 		file, ok := dbFilesMap[fileId]
 		if ok == true {
-			fmt.Println("Deleting file ", file.Path) // TODO: delete the file actually from the file storage? (for now soft delete)
+			fmt.Println("Deleting file", file.Path) // TODO: delete the file actually from the file storage? (for now soft delete)
 			delete(dbFilesMap, fileId)
 		}
 	}
