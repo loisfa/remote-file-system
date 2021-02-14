@@ -9,7 +9,7 @@ COPY . .
 # Download all the dependencies
 RUN go get -d -v ./...
 
-# Install the package
+# Install go package
 RUN go install -v ./...
 
 # This container exposes port 8080 to the outside world
