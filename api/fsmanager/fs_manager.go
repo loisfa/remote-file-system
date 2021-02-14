@@ -76,6 +76,16 @@ func DBGetFolder(folderId int) (*DBFolder, error) {
 	return folder , nil
 }
 
+
+func DBGetFile(fileId int) (*DBFile, error) {
+	folder := dbFilesMap[fileId]
+	if (folder == nil) {
+		return nil, errors.New("Could not find file for specified id")
+	}
+
+	return folder, nil
+}
+
 func DBGetFoldersIn(folderId int) ([]*DBFolder, error) {
 	folder := dbFoldersMap[folderId]
 	if (folder == nil) {
@@ -89,6 +99,21 @@ func DBGetFoldersIn(folderId int) ([]*DBFolder, error) {
 		}
 	}
 	return folders, nil
+}
+
+func DBGetFilesIn(folderId int) ([]*DBFile, error) {
+	folder := dbFoldersMap[folderId]
+	if (folder == nil) {
+		return nil, errors.New("Could not find folder for specified id")
+	}
+
+	var files []*DBFile
+	for _, file := range dbFilesMap {
+		if file.ParentId == folderId {
+			files = append(files, file)
+		}
+	}
+	return files, nil
 }
 
 func DBCreateFolder(name string, parentId int) int {

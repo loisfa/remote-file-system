@@ -38,10 +38,6 @@ type ApiFolderContent struct {
 	Files   []*ApiFile   `json:"files"`   // readonly
 }
 
-func hasAccess(userId int, fileId string) bool {
-	return true // TODO
-}
-
 // TODO why upper case? Is not exposed outside
 func GetContentIn(folderId int) (*ApiFolderContent, error) {
 	currentFolder, err := fsmanager.DBGetFolder(folderId)
@@ -56,8 +52,8 @@ func GetContentIn(folderId int) (*ApiFolderContent, error) {
 
 	subFolders, err := fsmanager.DBGetFoldersIn(folderId)
 	if err != nil {
-			return nil, err
-		}
+		return nil, err
+	}
 
 	var apiFolders []*ApiFolder
 	for _, folder := range subFolders {
@@ -68,10 +64,13 @@ func GetContentIn(folderId int) (*ApiFolderContent, error) {
 		apiFolders = append(apiFolders, apiFolder)
 	}
 	
-	fileIdToFileMap := fsmanager.GetDbFileMap()
+	files, err := fsmanager.DBGetFilesIn(folderId)
+	if err != nil {
+		return nil, err
+	}
+
 	var apiFiles []*ApiFile
-	// TODO with map no need to loop
-	for _, file := range fileIdToFileMap {
+	for _, file := range files {
 		if file.ParentId == folderId {
 			apiFile := &ApiFile{
 				file.Id,
@@ -93,15 +92,15 @@ func ServeFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	fileIdToFileMap := fsmanager.GetDbFileMap() // TODO get rid of this map here
-	file := fileIdToFileMap[fileId]
 
-	if file != nil {
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", file.Name))
-		http.ServeFile(w, r, file.Path)
-	} else {
+	file, err := fsmanager.DBGetFile(fileId)
+	if file == nil {
 		http.Error(w, "File not found", http.StatusNotFound)
+		return
 	}
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", file.Name))
+	http.ServeFile(w, r, file.Path) 
 }
 
 func GetFolderContent(w http.ResponseWriter, r *http.Request) {
@@ -376,7 +375,7 @@ func main() {
 	corsMw := mux.CORSMethodMiddleware(r)
 	r.Use(corsMw)
 
-	// TODO: see if can be deleted (in favor of is just above)
+	// TODO: see if can be deleted (in favor of what is just above)
 	corsObj := handlers.AllowedOrigins([]string{"*"})
 	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization", 
 		"Accept", "Accept-Language", "Content-Language", "Origin"})

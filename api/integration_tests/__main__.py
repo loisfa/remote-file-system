@@ -220,7 +220,6 @@ if files != None:
             found_created_file = True
     assert found_created_file == False, "The deleted file still appears inside the folder"
 # Ensure the file cannot be lookup
-print("downloading file")
 response = session.get(ROOT_URL + "/DownloadFile/" + str(uploaded_file1_id))
 assert response.status_code == 404, "Wrong http code received on trying to access deleted file: " + str(response.status_code)
 
