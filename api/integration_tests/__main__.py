@@ -7,8 +7,6 @@ import cgi
 import sys
 from model.dto import CreateFolderDTO, UpdateFolderDTO
 
-# TODO do one extra level of depth on folder to ensure recursive delete works
-
 # TODO think of using env variables
 PORT=8080
 ROOT_URL="http://localhost:" + str(PORT)
@@ -223,6 +221,52 @@ if files != None:
 # Ensure the file cannot be lookup
 response = session.get(ROOT_URL + "/DownloadFile/" + str(uploaded_file1_id))
 assert response.status_code == 404, "Wrong http code received on trying to access deleted file: " + str(response.status_code)
+
+# ENSURE FILES ARE REMOVED WHEN FOLDERS ARE DELETED
+# /folder1/file.txt
+# /folder1/folder1.2/file.txt
+# Create /folder1
+to_create_folder1 = CreateFolderDTO("folder1", root_folder_id)
+response = session.post(ROOT_URL + "/folders", to_create_folder1.toJson())
+assert response.status_code == 201, "Wrong http code received on create /folder1 in root folder: " + str(response.status_code)
+created_folder1_id: int = int(response.text)
+# Create /folder1/folder1.1
+to_create_folder1_2 = CreateFolderDTO("folder1.2", created_folder1_id)
+response = session.post(ROOT_URL + "/folders", to_create_folder1_2.toJson())
+created_folder2_id: int = int(response.text)
+assert response.status_code == 201, "Wrong http code received on create /folder1.2 in /folder1: " + str(response.status_code) 
+# Add fileA.txt in /folder1
+response = session.post(
+    ROOT_URL + "/UploadFile?dest=" + str(created_folder1_id), 
+    files = { 'upload': open(file1_path, 'rb') })
+assert response.status_code == 201, "Wrong http code received on create file in /folder1: " + str(response.status_code)
+body = json.loads(response.text)
+uploaded_fileA_id = body
+# Add fileB.txt in /folder1/folder1.2
+response = session.post(
+    ROOT_URL + "/UploadFile?dest=" + str(created_folder2_id), 
+    files = { 'upload': open(file1_path, 'rb') })
+assert response.status_code == 201, "Wrong http code received on create file in /folder1: " + str(response.status_code)
+body = json.loads(response.text)
+uploaded_fileB_id = body
+# Ensure both files exist
+response = session.get(ROOT_URL + "/DownloadFile/" + str(uploaded_fileA_id))
+assert response.status_code == 200, "Wrong http code received on download uploaded fileA: " + str(response.status_code)
+response = session.get(ROOT_URL + "/DownloadFile/" + str(uploaded_fileB_id))
+assert response.status_code == 200, "Wrong http code received on download uploaded fileB: " + str(response.status_code)
+# Delete /folder1
+response = session.delete(ROOT_URL + "/folders/" + str(created_folder1_id))
+assert response.status_code == 204, "Wrong http code received on delete /folder1: " + str(response.status_code)
+# Ensure /folder1 and /folder1/folder1.2 are deleted
+response = session.get(ROOT_URL + "/folders/" + str(created_folder1_id))
+assert response.status_code == 404, "Wrong http code received on get deleted /folder1: " + str(response.status_code)
+response = session.get(ROOT_URL + "/folders/" + str(created_folder2_id))
+assert response.status_code == 404, "Wrong http code received on get deleted /folder1/folder1.2: " + str(response.status_code)
+# Ensure both files are not found anymore
+response = session.get(ROOT_URL + "/DownloadFile/" + str(uploaded_fileA_id))
+assert response.status_code == 404, "Wrong http code received on download deleted fileA: " + str(response.status_code)
+response = session.get(ROOT_URL + "/DownloadFile/" + str(uploaded_fileB_id))
+assert response.status_code == 404, "Wrong http code received on download deleted fileB: " + str(response.status_code)
 
 os.remove(file1.name)
 os.rmdir(tmp_files_path)

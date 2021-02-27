@@ -361,7 +361,6 @@ func main() {
 	/*
 	 * FILES
 	 */
-	 
 	r.HandleFunc("/files/{fileId:[0-9]+}", DeleteFile).Methods(http.MethodDelete, http.MethodOptions)
 
 	r.HandleFunc("/DownloadFile/{fileId:[0-9]+}", ServeFile).Methods(http.MethodGet)
