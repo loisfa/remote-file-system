@@ -3,6 +3,8 @@
 ## Requirements
 - GoLang
 - NodesJS 10+
+- Python 3
+- pipenv
 
 ## Start the app
 ### API

@@ -4,11 +4,12 @@ import json
 import time
 import math
 import cgi
-from model import FolderDTO, FileDTO
+import sys
+from model.dto import CreateFolderDTO, UpdateFolderDTO
+
+# TODO do one extra level of depth on folder to ensure recursive delete works
 
 # TODO think of using env variables
-# TODO do one extra level of depth on folder to ensure recursive delete works 
-# TODO the file is deleted once the folder is deleted
 PORT=8080
 ROOT_URL="http://localhost:" + str(PORT)
 
@@ -19,7 +20,7 @@ print("Starting integration tests...")
 # HEALTH CHECK
 response = session.get(ROOT_URL + "/health-check")
 if (response.status_code != 200):
-    print("The API health-check was unsuccessful. Received Http status: " + status_code + ". Please make sure the API.")
+    print("The API health-check was unsuccessful. Received Http status: " + str(response.status_code) + ". Please make sure the API.")
 
 # GET FOLDER
 # Retrieve the id of the root folder, and check it exists 
@@ -30,11 +31,11 @@ root_folder_id = body['currentFolder']['id']
 assert root_folder_id is not None, "root folder id is null"
 # Ensures GET on non-existing folder returns 404 
 response = session.get(ROOT_URL + "/folders/123456")
-assert response.status_code, "Wrong http code received on retrieve non-existing folder: " + response.status_code
+assert response.status_code, "Wrong http code received on retrieve non-existing folder: " + str(response.status_code)
 
 ### CREATE FOLDER
 # Create a folder inside the root folder
-to_create_folder = FolderDTO(None, "Folder 1", root_folder_id)
+to_create_folder = CreateFolderDTO("Folder 1", root_folder_id)
 response = session.post(ROOT_URL + "/folders", to_create_folder.toJson())
 assert response.status_code == 201, "Wrong http code received on create new folder in root folder"
 created_folder_id = response.text
@@ -51,14 +52,14 @@ assert found_created_folder == True, "Could not find the folder just created"
 
 ### UPDATE FOLDER
 # Updated root name
-to_update_folder = FolderDTO(None, "Root folder new name", None)
+to_update_folder = UpdateFolderDTO("Root folder new name", None)
 response = session.put(ROOT_URL + "/folders/" + str(root_folder_id), to_update_folder.toJson())
 assert response.status_code == 204, "Wrong http code received on folder update: " + str(response.status_code)
 response = session.get(ROOT_URL + "/folders")
 body = json.loads(response.text)
 assert body['currentFolder']['name'] == "Root folder new name", "Wrong name for root folder on update"
 # Updated created folder's name
-to_update_folder = FolderDTO(None, "Folder 1.1", None)
+to_update_folder = UpdateFolderDTO("Folder 1.1", None)
 response = session.put(ROOT_URL + "/folders/" + created_folder_id, to_update_folder.toJson())
 assert response.status_code == 204, "Wrong http code received on folder update: " + str(response.status_code)
 # Check whether the folder name was updated
@@ -71,7 +72,7 @@ assert body['currentFolder']['name'] == "Folder 1.1", "The name of the folder ju
 response = session.put(ROOT_URL + "/MoveFolder/" + str(root_folder_id) + "?dest=" + str(created_folder_id))
 assert response.status_code == 500, "Wrong http code received on move folder: " + str(response.status_code)
 # Create folder 2 in the root
-to_create_folder_2 = FolderDTO(None, "Folder 2", root_folder_id)
+to_create_folder_2 = CreateFolderDTO("Folder 2", root_folder_id)
 response = session.post(ROOT_URL + "/folders", to_create_folder_2.toJson())
 assert response.status_code == 201, "Wrong http code received on create new folder in root folder"
 created_folder_2_id = response.text
@@ -170,7 +171,7 @@ assert response.content == open(file1.name, 'rb').read(), "Wrong content for the
 
 # MOVE FILE FROM ROOT FOLDER TO ANOTHER FOLDER
 # Create a folder inside the root folder
-to_create_folder_3 = FolderDTO(None, "Folder 3", root_folder_id)
+to_create_folder_3 = CreateFolderDTO("Folder 3", root_folder_id)
 response = session.post(ROOT_URL + "/folders", to_create_folder.toJson())
 assert response.status_code == 201, "Wrong http code received on create new folder in root folder"
 created_folder_3_id = response.text
