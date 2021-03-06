@@ -340,7 +340,7 @@ func main() {
 	fsmanager.InitDB()
 	// var driver neo4j.Driver
 	driver := fsmanager.InitDriver().(neo4j.Driver)
-	item, err := fsmanager.InsertFile(driver)
+	item, err := fsmanager.CreateFile(driver, "this is a new name", "this is a new Path", nil)
 	if err != nil {
 		fmt.Printf("%v\n", err)
 		panic(err)
