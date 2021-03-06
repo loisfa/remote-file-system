@@ -16,10 +16,10 @@ type DBFolder struct {
 }
 
 type DBFile struct {
-	Id          int // readonly
-	Name        string
-	Path        string // readonly
-	ParentId    int
+	Id       int // readonly
+	Name     string
+	Path     string // readonly
+	ParentId int
 }
 
 var rootFolder = &DBFolder{0, "", nil}
@@ -59,7 +59,7 @@ func InitDB() {
 	dbFoldersMap[photosFolder.Id] = photosFolder
 	dbFoldersMap[summerPhotosFolder.Id] = summerPhotosFolder
 	foldersAutoIncrementIndex = 3
-	
+
 	dbFilesMap[textFile1.Id] = textFile1
 	dbFilesMap[textFile2.Id] = textFile2
 	filesAutoIncrementIndex = 2
@@ -69,17 +69,16 @@ func InitDB() {
 
 func DBGetFolder(folderId int) (*DBFolder, error) {
 	folder := dbFoldersMap[folderId]
-	if (folder == nil) {
+	if folder == nil {
 		return nil, errors.New("Could not find folder for specified id")
 	}
 
-	return folder , nil
+	return folder, nil
 }
-
 
 func DBGetFile(fileId int) (*DBFile, error) {
 	folder := dbFilesMap[fileId]
-	if (folder == nil) {
+	if folder == nil {
 		return nil, errors.New("Could not find file for specified id")
 	}
 
@@ -88,7 +87,7 @@ func DBGetFile(fileId int) (*DBFile, error) {
 
 func DBGetFoldersIn(folderId int) ([]*DBFolder, error) {
 	folder := dbFoldersMap[folderId]
-	if (folder == nil) {
+	if folder == nil {
 		return nil, errors.New("Could not find folder for specified id")
 	}
 
@@ -103,7 +102,7 @@ func DBGetFoldersIn(folderId int) ([]*DBFolder, error) {
 
 func DBGetFilesIn(folderId int) ([]*DBFile, error) {
 	folder := dbFoldersMap[folderId]
-	if (folder == nil) {
+	if folder == nil {
 		return nil, errors.New("Could not find folder for specified id")
 	}
 
@@ -215,7 +214,7 @@ func removeFiles(fileIds []int) {
 }
 
 func DBDeleteFolderAndContent(folderId int) error {
-	if (folderId == rootFolder.Id) {
+	if folderId == rootFolder.Id {
 		return errors.New("Illegal Operation: trying to delete root folder.")
 	}
 
@@ -237,7 +236,6 @@ func DBDeleteFolderAndContent(folderId int) error {
 
 	return nil
 }
-
 
 func DBDeleteFile(fileId int) error {
 	fmt.Println("Deleting file", fileId)

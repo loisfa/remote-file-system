@@ -13,11 +13,12 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 
 	"github.com/loisfa/remote-file-system/api/fsmanager"
 )
 
-// Rename by FolderDTO?? (same for other Api* models) 
+// Rename by FolderDTO?? (same for other Api* models)
 type ApiFolder struct {
 	Id       int    `json:"id"` // readonly
 	Name     string `json:"name"`
@@ -28,14 +29,14 @@ type ApiFolder struct {
 }
 
 type ApiFile struct {
-	Id          int    `json:"id"`
-	Name        string `json:"name"`
+	Id   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 type ApiFolderContent struct {
-	CurrentFolder *ApiFolder `json:"currentFolder"`
-	Folders []*ApiFolder `json:"folders"` // readonly
-	Files   []*ApiFile   `json:"files"`   // readonly
+	CurrentFolder *ApiFolder   `json:"currentFolder"`
+	Folders       []*ApiFolder `json:"folders"` // readonly
+	Files         []*ApiFile   `json:"files"`   // readonly
 }
 
 // TODO why upper case? Is not exposed outside
@@ -44,7 +45,7 @@ func GetContentIn(folderId int) (*ApiFolderContent, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var apiCurrentFolder *ApiFolder = &ApiFolder{
 		currentFolder.Id,
 		currentFolder.Name,
@@ -63,7 +64,7 @@ func GetContentIn(folderId int) (*ApiFolderContent, error) {
 			&folderId}
 		apiFolders = append(apiFolders, apiFolder)
 	}
-	
+
 	files, err := fsmanager.DBGetFilesIn(folderId)
 	if err != nil {
 		return nil, err
@@ -100,7 +101,7 @@ func ServeFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", file.Name))
-	http.ServeFile(w, r, file.Path) 
+	http.ServeFile(w, r, file.Path)
 }
 
 func GetFolderContent(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +116,7 @@ func GetFolderContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	apiFolderContent, err := GetContentIn(folderId)
-	if (err != nil) {
+	if err != nil {
 		http.Error(w, err.Error(), 404)
 		return
 	}
@@ -128,11 +129,11 @@ func GetFolderContent(w http.ResponseWriter, r *http.Request) {
 func GetRootFolderContent(w http.ResponseWriter, r *http.Request) {
 	apiFolderContent, err := GetContentIn(0) // 0 magic number! TODO use the map instead to retrieve root folder
 
-	if (err != nil) {
+	if err != nil {
 		http.Error(w, err.Error(), 404)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(apiFolderContent)
@@ -337,6 +338,14 @@ func healthCheckStatusOK(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	fsmanager.InitDB()
+	// var driver neo4j.Driver
+	driver := fsmanager.InitDriver().(neo4j.Driver)
+	item, err := fsmanager.InsertFile(driver)
+	if err != nil {
+		fmt.Printf("%v\n", err)
+		panic(err)
+	}
+	fmt.Printf("%v\n", item)
 
 	r := mux.NewRouter()
 
@@ -348,9 +357,9 @@ func main() {
 
 	r.HandleFunc("/folders/{folderId:[0-9]+}", GetFolderContent).Methods(http.MethodGet)
 	r.HandleFunc("/folders", GetRootFolderContent).Methods(http.MethodGet)
-		
+
 	r.HandleFunc("/folders", CreateFolder).Methods(http.MethodPost)
-	
+
 	r.HandleFunc("/folders/{folderId:[0-9]+}", UpdateFolder).Methods(http.MethodPut)
 	r.HandleFunc("/folders/{folderId:[0-9]+}", DeleteFolderAndContent).Methods(http.MethodDelete, http.MethodOptions) // SEE if can delere methodOptions
 
@@ -364,22 +373,22 @@ func main() {
 	r.HandleFunc("/files/{fileId:[0-9]+}", DeleteFile).Methods(http.MethodDelete, http.MethodOptions)
 
 	r.HandleFunc("/DownloadFile/{fileId:[0-9]+}", ServeFile).Methods(http.MethodGet)
-	
+
 	r.HandleFunc("/UploadFile", UploadFile).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPost)
 
 	r.HandleFunc("/MoveFile/{fileId:[0-9]+}", MoveFile).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
 
 	http.Handle("/", r)
-	
+
 	corsMw := mux.CORSMethodMiddleware(r)
 	r.Use(corsMw)
 
 	// TODO: see if can be deleted (in favor of what is just above)
 	corsObj := handlers.AllowedOrigins([]string{"*"})
-	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization", 
+	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization",
 		"Accept", "Accept-Language", "Content-Language", "Origin"})
 	methodsOk := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"})
-	
+
 	http.ListenAndServe(":8080", handlers.CORS(corsObj, headersOk, methodsOk)(r))
 
 	fmt.Println("Server running on port 8080")
