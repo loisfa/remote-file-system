@@ -13,7 +13,6 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 
 	"github.com/loisfa/remote-file-system/api/fsmanager"
 )
@@ -22,7 +21,7 @@ import (
 type ApiFolder struct {
 	Id       int    `json:"id"` // readonly
 	Name     string `json:"name"`
-	ParentId *int   `json:"parentId"`
+	ParentId *int   `json:"parentId"` // nil in case folder is at the root
 	// Path string `json:"path"`
 	// Folders []*ApiFolder `json:"folders"` // readonly
 	// Files   []*ApiFile   `json:"files"`   // readonly
@@ -34,56 +33,74 @@ type ApiFile struct {
 }
 
 type ApiFolderContent struct {
-	CurrentFolder *ApiFolder   `json:"currentFolder"`
-	Folders       []*ApiFolder `json:"folders"` // readonly
-	Files         []*ApiFile   `json:"files"`   // readonly
+	CurrentFolder *ApiFolder  `json:"currentFolder"` // nil in case of root folder
+	Folders       []ApiFolder `json:"folders"`       // readonly
+	Files         []ApiFile   `json:"files"`         // readonly
 }
 
-// TODO why upper case? Is not exposed outside
-func GetContentIn(folderId int) (*ApiFolderContent, error) {
-	currentFolder, err := fsmanager.DBGetFolder(folderId)
-	if err != nil {
-		return nil, err
+// TODO why upper case? Is not exposed outside this package
+func getContentIn(folderId *int) (*ApiFolderContent, error) {
+	fmt.Println("Getting content in folder %d", folderId)
+
+	var currentFolder *fsmanager.Folder
+	if folderId != nil {
+		var err error
+		currentFolder, err = fsmanager.DBGetFolder(*folderId)
+		fmt.Println("current folder: ", currentFolder, " - err: ", err)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	var apiCurrentFolder *ApiFolder = &ApiFolder{
-		currentFolder.Id,
-		currentFolder.Name,
-		currentFolder.ParentId}
-
+	fmt.Println("Getting DBGetFoldersIn folder %d", folderId)
 	subFolders, err := fsmanager.DBGetFoldersIn(folderId)
 	if err != nil {
 		return nil, err
 	}
 
-	var apiFolders []*ApiFolder
-	for _, folder := range subFolders {
-		apiFolder := &ApiFolder{
-			folder.Id,
-			folder.Name,
-			&folderId}
-		apiFolders = append(apiFolders, apiFolder)
-	}
-
+	fmt.Println("Getting DBGetFilesIn in folder %d", folderId)
 	files, err := fsmanager.DBGetFilesIn(folderId)
 	if err != nil {
 		return nil, err
 	}
 
-	var apiFiles []*ApiFile
-	for _, file := range files {
-		if file.ParentId == folderId {
-			apiFile := &ApiFile{
-				file.Id,
-				file.Name}
-			apiFiles = append(apiFiles, apiFile)
-		}
+	var apiCurrentFolder *ApiFolder
+	if currentFolder != nil {
+		apiCurrentFolder = &ApiFolder{
+			currentFolder.Id,
+			currentFolder.Name,
+			currentFolder.ParentId}
+	}
+
+	var apiFolders []ApiFolder
+	for idx := range *subFolders {
+		folder := (*subFolders)[idx]
+		apiFolders = append(apiFolders, mapFolderToApiFolder(folder))
+	}
+
+	var apiFiles []ApiFile
+	for idx := range *files {
+		file := (*files)[idx]
+		apiFiles = append(apiFiles, mapFileToApiFile(file))
 	}
 
 	return &ApiFolderContent{apiCurrentFolder, apiFolders, apiFiles}, nil
 }
 
-func ServeFile(w http.ResponseWriter, r *http.Request) {
+func mapFolderToApiFolder(folder fsmanager.Folder) ApiFolder {
+	return ApiFolder{
+		folder.Id,
+		folder.Name,
+		&folder.Id}
+}
+
+func mapFileToApiFile(file fsmanager.File) ApiFile {
+	return ApiFile{
+		file.Id,
+		file.Name}
+}
+
+func serveFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	var fileId int
@@ -104,7 +121,7 @@ func ServeFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, file.Path)
 }
 
-func GetFolderContent(w http.ResponseWriter, r *http.Request) {
+func getFolderContent(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	var folderId int
@@ -115,7 +132,24 @@ func GetFolderContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiFolderContent, err := GetContentIn(folderId)
+	apiFolderContent, err := getContentIn(&folderId)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if apiFolderContent == nil {
+		http.Error(w, err.Error(), 404)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(apiFolderContent)
+}
+
+func getRootFolderContent(w http.ResponseWriter, r *http.Request) {
+	apiFolderContent, err := getContentIn(nil) // 0 magic number! TODO use the map instead to retrieve root folder
+
 	if err != nil {
 		http.Error(w, err.Error(), 404)
 		return
@@ -126,33 +160,33 @@ func GetFolderContent(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(apiFolderContent)
 }
 
-func GetRootFolderContent(w http.ResponseWriter, r *http.Request) {
-	apiFolderContent, err := GetContentIn(0) // 0 magic number! TODO use the map instead to retrieve root folder
-
-	if err != nil {
-		http.Error(w, err.Error(), 404)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(apiFolderContent)
-}
-
-func CreateFolder(w http.ResponseWriter, r *http.Request) {
-	var f ApiFolder
-	err := json.NewDecoder(r.Body).Decode(&f)
+func createFolder(w http.ResponseWriter, r *http.Request) {
+	var folder ApiFolder
+	err := json.NewDecoder(r.Body).Decode(&folder)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	id := fsmanager.DBCreateFolder(f.Name, *(f.ParentId))
+	destFolderId := folder.ParentId
+	if destFolderId != nil {
+		if exists, err := fsmanager.DBExistsFolder(*destFolderId); err != nil || exists == nil || !*exists {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	id, err := fsmanager.DBCreateFolder(folder.Name, destFolderId)
+	if err != nil {
+		http.Error(w, err.Error(), 500) // TODO improve
+		return
+	}
+
 	w.WriteHeader(http.StatusCreated)
-	fmt.Fprintf(w, strconv.Itoa(id))
+	fmt.Fprintf(w, strconv.Itoa(*id))
 }
 
-func UpdateFolder(w http.ResponseWriter, r *http.Request) {
+func updateFolder(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	var id *int
@@ -181,7 +215,7 @@ func UpdateFolder(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func DeleteFolderAndContent(w http.ResponseWriter, r *http.Request) {
+func deleteFolderAndContent(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	var id *int
@@ -203,7 +237,7 @@ func DeleteFolderAndContent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func MoveFolder(w http.ResponseWriter, r *http.Request) {
+func moveFolder(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	var folderId int
@@ -233,7 +267,7 @@ func MoveFolder(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func DeleteFile(w http.ResponseWriter, r *http.Request) {
+func deleteFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	var id *int
@@ -255,7 +289,7 @@ func DeleteFile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func MoveFile(w http.ResponseWriter, r *http.Request) {
+func moveFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	var fileId int
@@ -284,17 +318,26 @@ func MoveFile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func UploadFile(w http.ResponseWriter, r *http.Request) { // TODO add the id in the response
+func uploadFile(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("File Upload Endpoint Hit")
 
 	vars := mux.Vars(r)
 
-	var destFolderId int
-	destFolderIdStr := vars["destFolderId"]
-	var err error
-	if destFolderId, err = strconv.Atoi(destFolderIdStr); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	var destFolderId *int
+	if destFolderIdStr, found := vars["destFolderId"]; found {
+		id, err := strconv.Atoi(destFolderIdStr)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		destFolderId = &id
+	}
+
+	if destFolderId != nil {
+		if exists, err := fsmanager.DBExistsFolder(*destFolderId); err != nil || exists == nil || !*exists {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	// 10 << 20 specifies a maximum upload of 10 MB files.
@@ -315,6 +358,7 @@ func UploadFile(w http.ResponseWriter, r *http.Request) { // TODO add the id in 
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	defer tempFile.Close()
 
@@ -323,13 +367,19 @@ func UploadFile(w http.ResponseWriter, r *http.Request) { // TODO add the id in 
 		fmt.Println("Could not read file")
 		fmt.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	tempFile.Write(fileBytes)
 
-	fileId := fsmanager.DBCreateFile(handler.Filename, tempFile.Name(), destFolderId)
+	fileId, err := fsmanager.DBCreateFile(handler.Filename, tempFile.Name(), destFolderId)
+	if err != nil {
+		http.Error(w, err.Error(), 500) // TODO improve
+		return
+	}
+
 	w.WriteHeader(http.StatusCreated)
-	fmt.Fprintf(w, strconv.Itoa(fileId))
+	fmt.Fprintf(w, strconv.Itoa(*fileId))
 }
 
 func healthCheckStatusOK(w http.ResponseWriter, r *http.Request) {
@@ -337,16 +387,6 @@ func healthCheckStatusOK(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	fsmanager.InitDB()
-	// var driver neo4j.Driver
-	driver := fsmanager.InitDriver().(neo4j.Driver)
-	item, err := fsmanager.CreateFile(driver, "this is a new name", "this is a new Path", nil)
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		panic(err)
-	}
-	fmt.Printf("%v\n", item)
-
 	r := mux.NewRouter()
 
 	r.HandleFunc("/health-check", healthCheckStatusOK).Methods(http.MethodGet)
@@ -355,28 +395,29 @@ func main() {
 	 * FOLDERS
 	 */
 
-	r.HandleFunc("/folders/{folderId:[0-9]+}", GetFolderContent).Methods(http.MethodGet)
-	r.HandleFunc("/folders", GetRootFolderContent).Methods(http.MethodGet)
+	r.HandleFunc("/folders/{folderId:[0-9]+}", getFolderContent).Methods(http.MethodGet)
+	r.HandleFunc("/folders", getRootFolderContent).Methods(http.MethodGet)
 
-	r.HandleFunc("/folders", CreateFolder).Methods(http.MethodPost)
+	r.HandleFunc("/folders", createFolder).Methods(http.MethodPost)
 
-	r.HandleFunc("/folders/{folderId:[0-9]+}", UpdateFolder).Methods(http.MethodPut)
-	r.HandleFunc("/folders/{folderId:[0-9]+}", DeleteFolderAndContent).Methods(http.MethodDelete, http.MethodOptions) // SEE if can delere methodOptions
+	r.HandleFunc("/folders/{folderId:[0-9]+}", updateFolder).Methods(http.MethodPut)
+	r.HandleFunc("/folders/{folderId:[0-9]+}", deleteFolderAndContent).Methods(http.MethodDelete, http.MethodOptions) // SEE if can delete methodOptions
 
-	r.HandleFunc("/MoveFolder/{folderId:[0-9]+}", MoveFolder).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
+	r.HandleFunc("/MoveFolder/{folderId:[0-9]+}", moveFolder).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
 
 	// TODO download selected folder as a .zip
 
 	/*
 	 * FILES
 	 */
-	r.HandleFunc("/files/{fileId:[0-9]+}", DeleteFile).Methods(http.MethodDelete, http.MethodOptions)
+	r.HandleFunc("/files/{fileId:[0-9]+}", deleteFile).Methods(http.MethodDelete, http.MethodOptions)
 
-	r.HandleFunc("/DownloadFile/{fileId:[0-9]+}", ServeFile).Methods(http.MethodGet)
+	r.HandleFunc("/DownloadFile/{fileId:[0-9]+}", serveFile).Methods(http.MethodGet)
 
-	r.HandleFunc("/UploadFile", UploadFile).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPost)
+	r.HandleFunc("/UploadFile", uploadFile).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPost)
+	r.HandleFunc("/UploadFile", uploadFile).Methods(http.MethodPost)
 
-	r.HandleFunc("/MoveFile/{fileId:[0-9]+}", MoveFile).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
+	r.HandleFunc("/MoveFile/{fileId:[0-9]+}", moveFile).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
 
 	http.Handle("/", r)
 

@@ -8,46 +8,46 @@ import (
 	"fmt"
 )
 
-type DBFolder struct {
-	Id       int // readonly
-	Name     string
-	ParentId *int // root folder <--> ParentId is nil
-	// TODO isDelete boolean => soft delete
+var rootFolder = &Folder{
+	Id:       0,
+	Name:     "",
+	ParentId: nil,
+}
+var photosFolder = &Folder{
+	Id:       1,
+	Name:     "Photos",
+	ParentId: &(rootFolder.Id),
+}
+var summerPhotosFolder = &Folder{
+	Id:       2,
+	Name:     "Summer",
+	ParentId: &(photosFolder.Id),
 }
 
-type DBFile struct {
-	Id       int // readonly
-	Name     string
-	Path     string // readonly
-	ParentId int
+var textFile1 = &File{
+	Id:       0,
+	Name:     "file1.txt",
+	Path:     "temp-files/file1.txt",
+	ParentId: &photosFolder.Id,
+}
+var textFile2 = &File{
+	Id:       1,
+	Name:     "file2.txt",
+	Path:     "temp-files/file2.txt",
+	ParentId: &rootFolder.Id,
 }
 
-var rootFolder = &DBFolder{0, "", nil}
-var photosFolder = &DBFolder{1, "Photos", &(rootFolder.Id)}
-var summerPhotosFolder = &DBFolder{2, "Summer", &(photosFolder.Id)}
-
-var textFile1 = &DBFile{
-	0,
-	"file1.txt",
-	"temp-files/file1.txt",
-	photosFolder.Id}
-var textFile2 = &DBFile{
-	1,
-	"file2.txt",
-	"temp-files/file2.txt",
-	rootFolder.Id}
-
-var dbFoldersMap map[int]*DBFolder = make(map[int]*DBFolder)
-var dbFilesMap map[int]*DBFile = make(map[int]*DBFile)
+var FoldersMap map[int]*Folder = make(map[int]*Folder)
+var FilesMap map[int]*File = make(map[int]*File)
 
 // public for testing purpose
-func GetDbFolderMap() map[int]*DBFolder {
-	return dbFoldersMap
+func GetDbFolderMap() map[int]*Folder {
+	return FoldersMap
 }
 
 // public for testing purpose
-func GetDbFileMap() map[int]*DBFile {
-	return dbFilesMap
+func GetDbFileMap() map[int]*File {
+	return FilesMap
 }
 
 var foldersAutoIncrementIndex int
@@ -55,82 +55,75 @@ var filesAutoIncrementIndex int
 
 func InitDB() {
 	// TODO reuse the existing 'createXxx' methods to perform those operations
-	dbFoldersMap[rootFolder.Id] = rootFolder
-	dbFoldersMap[photosFolder.Id] = photosFolder
-	dbFoldersMap[summerPhotosFolder.Id] = summerPhotosFolder
+	FoldersMap[rootFolder.Id] = rootFolder
+	FoldersMap[photosFolder.Id] = photosFolder
+	FoldersMap[summerPhotosFolder.Id] = summerPhotosFolder
 	foldersAutoIncrementIndex = 3
 
-	dbFilesMap[textFile1.Id] = textFile1
-	dbFilesMap[textFile2.Id] = textFile2
+	FilesMap[textFile1.Id] = textFile1
+	FilesMap[textFile2.Id] = textFile2
 	filesAutoIncrementIndex = 2
 
 	return
 }
 
-func DBGetFolder(folderId int) (*DBFolder, error) {
-	folder := dbFoldersMap[folderId]
-	if folder == nil {
-		return nil, errors.New("Could not find folder for specified id")
+// TODO rename all the DBGet... --> Get... (remove "DB" prefix)
+func DBGetFolder(folderId int) (*Folder, error) {
+	fmt.Println("DBGetFolder: Getting folder in %d", folderId)
+	exists, err := ExistsFolder(folderId)
+	fmt.Println("DBGetFolder: exists: ", exists, "-- err: ", err)
+	if err != nil {
+		return nil, err
+	}
+	if !*exists {
+		return nil, nil
 	}
 
-	return folder, nil
+	folder, err := GetFolder(folderId)
+	if err != nil {
+		return nil, err
+	}
+	return folder, err
 }
 
-func DBGetFile(fileId int) (*DBFile, error) {
-	folder := dbFilesMap[fileId]
-	if folder == nil {
+func DBExistsFolder(folderId int) (*bool, error) {
+	return ExistsFolder(folderId)
+}
+
+func DBGetFile(fileId int) (*File, error) {
+	file, err := GetFile(fileId)
+	if err != nil {
+		return nil, err
+	}
+
+	if file == nil {
 		return nil, errors.New("Could not find file for specified id")
 	}
 
-	return folder, nil
+	return file, err
 }
 
-func DBGetFoldersIn(folderId int) ([]*DBFolder, error) {
-	folder := dbFoldersMap[folderId]
-	if folder == nil {
-		return nil, errors.New("Could not find folder for specified id")
-	}
-
-	var folders []*DBFolder
-	for _, folder := range dbFoldersMap {
-		if folder.ParentId != nil && *(folder.ParentId) == folderId {
-			folders = append(folders, folder)
-		}
-	}
-	return folders, nil
+func DBGetFoldersIn(folderId *int) (*[]Folder, error) {
+	// TODO check that the folder exist
+	return GetFoldersIn(folderId)
 }
 
-func DBGetFilesIn(folderId int) ([]*DBFile, error) {
-	folder := dbFoldersMap[folderId]
-	if folder == nil {
-		return nil, errors.New("Could not find folder for specified id")
-	}
-
-	var files []*DBFile
-	for _, file := range dbFilesMap {
-		if file.ParentId == folderId {
-			files = append(files, file)
-		}
-	}
-	return files, nil
+func DBGetFilesIn(folderId *int) (*[]File, error) {
+	// TODO check that the folder exist
+	return GetFilesIn(folderId)
 }
 
-func DBCreateFolder(name string, parentId int) int {
-	folderId := foldersAutoIncrementIndex
-	dbFoldersMap[folderId] = &DBFolder{folderId, name, &parentId}
-	foldersAutoIncrementIndex = foldersAutoIncrementIndex + 1
-	return folderId
+func DBCreateFolder(name string, parentId *int) (*int, error) {
+	return CreateFolder(name, parentId)
 }
 
-func DBCreateFile(name string, path string, parentId int) int {
-	fileId := filesAutoIncrementIndex
-	dbFilesMap[fileId] = &DBFile{fileId, name, path, parentId}
-	filesAutoIncrementIndex = filesAutoIncrementIndex + 1
-	return fileId
+func DBCreateFile(name string, path string, parentId *int) (*int, error) {
+	return CreateFile(name, path, parentId)
 }
 
+// TODO
 func DBUpdateFolder(folderId int, name string) error {
-	toUpdateFolder, ok := dbFoldersMap[folderId]
+	toUpdateFolder, ok := FoldersMap[folderId]
 
 	if ok == false {
 		return errors.New("Could not find folder for specified id")
@@ -140,12 +133,13 @@ func DBUpdateFolder(folderId int, name string) error {
 	return nil
 }
 
+// TODO
 func DBMoveFolder(folderId int, targetParentId *int) error {
 	if folderId == rootFolder.Id {
 		return errors.New("Illegal Operation: trying to move root folder")
 	}
 
-	toUpdateFolder, ok := dbFoldersMap[folderId]
+	toUpdateFolder, ok := FoldersMap[folderId]
 	if ok == false {
 		return errors.New("Could not find folder for specified id")
 	}
@@ -155,16 +149,17 @@ func DBMoveFolder(folderId int, targetParentId *int) error {
 }
 
 func DBMoveFile(fileId int, targetParentId *int) error {
-	toUpdateFile, ok := dbFilesMap[fileId]
+	toUpdateFile, ok := FilesMap[fileId]
 
 	if ok == false {
 		return errors.New("Could not find file for specified id")
 	}
 
-	toUpdateFile.ParentId = *targetParentId
+	toUpdateFile.ParentId = targetParentId
 	return nil
 }
 
+// TODO
 // could use goroutines with recursive?
 func getContentToDelete(folderId int) (toDeleteFolderIds []int, toDeleteFileIds []int) {
 
@@ -172,15 +167,15 @@ func getContentToDelete(folderId int) (toDeleteFolderIds []int, toDeleteFileIds 
 
 	toDeleteFileIds = []int{}
 
-	for _, folder := range dbFoldersMap {
+	for _, folder := range FoldersMap {
 		if folder.ParentId != nil && *(folder.ParentId) == folderId {
 			toDeleteFolderIds = append(toDeleteFolderIds, folder.Id)
 			break
 		}
 	}
 
-	for _, file := range dbFilesMap {
-		if file.ParentId == folderId {
+	for _, file := range FilesMap {
+		if file.ParentId != nil && *file.ParentId == folderId {
 			toDeleteFileIds = append(toDeleteFileIds, file.Id)
 			break
 		}
@@ -199,27 +194,28 @@ func getContentToDelete(folderId int) (toDeleteFolderIds []int, toDeleteFileIds 
 
 func removeFolders(folderIds []int) {
 	for _, folderId := range folderIds {
-		delete(dbFoldersMap, folderId)
+		delete(FoldersMap, folderId)
 	}
 }
 
 func removeFiles(fileIds []int) {
 	for _, fileId := range fileIds {
-		file, ok := dbFilesMap[fileId]
+		file, ok := FilesMap[fileId]
 		if ok == true {
 			fmt.Println("Deleting file", file.Path) // TODO: delete the file actually from the file storage? (for now soft delete)
-			delete(dbFilesMap, fileId)
+			delete(FilesMap, fileId)
 		}
 	}
 }
 
+// TODO
 func DBDeleteFolderAndContent(folderId int) error {
 	if folderId == rootFolder.Id {
 		return errors.New("Illegal Operation: trying to delete root folder.")
 	}
 
 	fmt.Println("Deleting db folder (and chidren)", folderId)
-	_, ok := dbFoldersMap[folderId]
+	_, ok := FoldersMap[folderId]
 
 	if ok == false {
 		return errors.New("Could not find folder for specified id")
@@ -237,9 +233,10 @@ func DBDeleteFolderAndContent(folderId int) error {
 	return nil
 }
 
+// TODO
 func DBDeleteFile(fileId int) error {
 	fmt.Println("Deleting file", fileId)
-	_, ok := dbFilesMap[fileId]
+	_, ok := FilesMap[fileId]
 
 	if ok == false {
 		return errors.New("Could not find folder for specified id") // find a way to fire 404
