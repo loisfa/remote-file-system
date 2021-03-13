@@ -286,11 +286,11 @@ func createNewFolderWithoutParentQuery(folderName string) (string, map[string]in
 		}
 }
 
-func updateFolderQuery(folderId int, folderName string) (string, map[string]interface{}) {
-	return `MATCH (folder:Folder {id: $folderId})
+func updateFolderQuery(folderID int, folderName string) (string, map[string]interface{}) {
+	return `MATCH (folder:Folder {id: $folderID})
 	SET folder.name = $folderName`,
 		map[string]interface{}{
-			"folderId":   folderId,
+			"folderID":   folderID,
 			"folderName": folderName,
 		}
 }
@@ -301,6 +301,68 @@ func updateFileQuery(fileId int, fileName string) (string, map[string]interface{
 		map[string]interface{}{
 			"fileId":   fileId,
 			"fileName": fileName,
+		}
+}
+
+func moveFolderToRootFolderQuery(folderId int) (string, map[string]interface{}) {
+	return `MATCH (folder:Folder {id: $folderId})
+	OPTIONAL MATCH (folder)-[rel:IS_INSIDE]->()
+	DELETE rel`,
+		map[string]interface{}{
+			"folderId": folderId,
+		}
+}
+
+func moveFolderQuery(folderID int, destFolderID int) (string, map[string]interface{}) {
+	return `MATCH (folder:Folder {id: $folderID})
+	MATCH (dest:Folder {id: $destFolderID})
+	OPTIONAL MATCH (folder)-[rel:IS_INSIDE]->()
+	DELETE rel
+	CREATE (folder)-[:IS_INSIDE]->(dest)`,
+		map[string]interface{}{
+			"folderID":     folderID,
+			"destFolderID": destFolderID,
+		}
+}
+
+func moveFileQuery(fileID int, destFolderID int) (string, map[string]interface{}) {
+	return `MATCH (file:File {id: $fileID})
+	MATCH (dest:Folder{id: $destFolderID})
+	OPTIONAL MATCH (file)-[rel:IS_INSIDE]->()
+	DELETE rel
+	CREATE (file)-[:IS_INSIDE]->(dest)`,
+		map[string]interface{}{
+			"fileID":       fileID,
+			"destFolderID": destFolderID,
+		}
+}
+
+func moveFileToRootFolderQuery(fileID int) (string, map[string]interface{}) {
+	return `MATCH (file:File {id: $fileID})
+	OPTIONAL MATCH (file)-[rel:IS_INSIDE]->()
+	DELETE rel`,
+		map[string]interface{}{
+			"fileID": fileID,
+		}
+}
+
+// Return the ids of all the deleted items?
+func deleteFolderContentQuery(folderID int) (string, map[string]interface{}) {
+	return `OPTIONAL MATCH (files:File)-[:IS_INSIDE *1..]->(Folder {id: $folderID})
+	OPTIONAL MATCH (folders:Folder)-[:IS_INSIDE *1..]->(Folder {id: $folderID})
+	OPTIONAL MATCH (folder:Folder {id: $folderID})
+	DETACH DELETE files, folders, folder`,
+		map[string]interface{}{
+			"folderID": folderID,
+		}
+}
+
+// Return the ids of all the deleted items?
+func deleteFileQuery(fileID int) (string, map[string]interface{}) {
+	return `MATCH (file:File {id: $fileID})
+	DETACH DELETE file`,
+		map[string]interface{}{
+			"fileID": fileID,
 		}
 }
 
@@ -503,7 +565,7 @@ func CreateFile(fileName string, filePath string, folderParentID *int) (*int, er
 	} else {
 		query, queryMap = createNewFileWithParentQuery(fileName, filePath, *folderParentID)
 	}
-	return executeWriteQuery(getDriver())(query, queryMap)
+	return executeCreateQuery(getDriver())(query, queryMap)
 }
 
 func CreateFolder(folderName string, folderParentID *int) (*int, error) {
@@ -516,10 +578,10 @@ func CreateFolder(folderName string, folderParentID *int) (*int, error) {
 		fmt.Println("createNewFolderWithParentQuery", *folderParentID)
 		query, queryMap = createNewFolderWithParentQuery(folderName, *folderParentID)
 	}
-	return executeWriteQuery(getDriver())(query, queryMap)
+	return executeCreateQuery(getDriver())(query, queryMap)
 }
 
-func executeWriteQuery(driver neo4j.Driver) func(string, map[string]interface{}) (*int, error) {
+func executeCreateQuery(driver neo4j.Driver) func(string, map[string]interface{}) (*int, error) {
 	return func(query string, queryMap map[string]interface{}) (*int, error) {
 		// Sessions are short-lived, cheap to create and NOT thread safe. Typically create one or more sessions
 		// per request in your web application. Make sure to call Close on the session when done.
@@ -547,7 +609,7 @@ func createItem(query string, queryMap map[string]interface{}) func(tx neo4j.Tra
 		// In face of driver native errors, make sure to return them directly.
 		// Depending on the error, the driver may try to execute the function again.
 		if err != nil {
-			fmt.Println("error on transaction run")
+			fmt.Println("Create: error on transaction run")
 			return nil, err
 		}
 
@@ -561,5 +623,80 @@ func createItem(query string, queryMap map[string]interface{}) func(tx neo4j.Tra
 		return &createdItem{
 			Id: int(record.Values[0].(int64)),
 		}, nil
+	}
+}
+
+func updateItem(query string, queryMap map[string]interface{}) func(tx neo4j.Transaction) (interface{}, error) {
+	return func(tx neo4j.Transaction) (interface{}, error) {
+		result, err := tx.Run(query, queryMap)
+		fmt.Println("result:")
+		fmt.Println(result)
+		// In face of driver native errors, make sure to return them directly.
+		// Depending on the error, the driver may try to execute the function again.
+		if err != nil {
+			fmt.Println("Update: error on transaction run")
+			return nil, err
+		}
+
+		return nil, nil
+	}
+}
+
+func UpdateFolder(folderID int, folderName string) error {
+	query, queryMap := updateFolderQuery(folderID, folderName)
+	return executeUpdateQuery(getDriver())(query, queryMap)
+}
+
+func UpdateFile(fileID int, fileName string) error {
+	query, queryMap := updateFileQuery(fileID, fileName)
+	return executeUpdateQuery(getDriver())(query, queryMap)
+}
+
+func MoveFolder(folderID int, destFolderID *int) error {
+	var query string
+	var queryMap map[string]interface{}
+	if destFolderID == nil {
+		query, queryMap = moveFolderToRootFolderQuery(folderID)
+	} else {
+		fmt.Println("Building quieries to move folder")
+		query, queryMap = moveFolderQuery(folderID, *destFolderID)
+	}
+	return executeUpdateQuery(getDriver())(query, queryMap)
+}
+
+func MoveFile(fileID int, destFolderID *int) error {
+	var query string
+	var queryMap map[string]interface{}
+	if destFolderID == nil {
+		query, queryMap = moveFileToRootFolderQuery(fileID)
+	} else {
+		query, queryMap = moveFileQuery(fileID, *destFolderID)
+	}
+	return executeUpdateQuery(getDriver())(query, queryMap)
+}
+
+func DeleteFolderContent(folderID int) error {
+	query, queryMap := deleteFolderContentQuery(folderID)
+	fmt.Println("just build deletd folder content query")
+	return executeUpdateQuery(getDriver())(query, queryMap)
+}
+
+func DeleteFile(folderID int) error {
+	query, queryMap := deleteFileQuery(folderID)
+	return executeUpdateQuery(getDriver())(query, queryMap)
+}
+
+func executeUpdateQuery(driver neo4j.Driver) func(string, map[string]interface{}) error {
+	return func(query string, queryMap map[string]interface{}) error {
+		// Sessions are short-lived, cheap to create and NOT thread safe. Typically create one or more sessions
+		// per request in your web application. Make sure to call Close on the session when done.
+		// For multi-database support, set sessionConfig.DatabaseName to requested database
+		// Session config will default to write mode, if only reads are to be used configure session for
+		// read mode.
+		session := getDriver().NewSession(neo4j.SessionConfig{})
+		defer session.Close()
+
+		_, err := session.WriteTransaction(updateItem(query, queryMap))
+		return err
 	}
 }

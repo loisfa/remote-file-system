@@ -44,6 +44,7 @@ func getContentIn(folderId *int) (*ApiFolderContent, error) {
 
 	var currentFolder *fsmanager.Folder
 	if folderId != nil {
+
 		var err error
 		currentFolder, err = fsmanager.DBGetFolder(*folderId)
 		fmt.Println("current folder: ", currentFolder, " - err: ", err)
@@ -129,6 +130,15 @@ func getFolderContent(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if folderId, err = strconv.Atoi(idStr); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	found, err := fsmanager.ExistsFolder(folderId)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+	}
+	if found != nil && *found == false {
+		http.Error(w, "Folder not found. Cannot retrieve its content", 404)
 		return
 	}
 
@@ -250,6 +260,7 @@ func moveFolder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	fmt.Println("folderId", folderId)
 	var destFolderId *int
 	var destFolderIdInt int
@@ -258,6 +269,7 @@ func moveFolder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	destFolderId = &destFolderIdInt
 	fmt.Println("destFolderId", destFolderId)
 
@@ -298,6 +310,7 @@ func moveFile(w http.ResponseWriter, r *http.Request) {
 	var fileId int
 	var err error
 	fileIdStr := vars["fileId"]
+	fmt.Println("fileIdStr: " + fileIdStr)
 	if fileId, err = strconv.Atoi(fileIdStr); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -306,6 +319,7 @@ func moveFile(w http.ResponseWriter, r *http.Request) {
 	var destFolderId *int
 	var destFolderIdInt int
 	destFolderIdStr := vars["destFolderId"]
+	fmt.Println("destFolderId: " + destFolderIdStr)
 	if destFolderIdInt, err = strconv.Atoi(destFolderIdStr); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -314,7 +328,7 @@ func moveFile(w http.ResponseWriter, r *http.Request) {
 
 	err = fsmanager.DBMoveFile(fileId, destFolderId)
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), 500)
 		return
 	}
 

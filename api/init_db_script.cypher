@@ -17,3 +17,5 @@ CREATE (s:Sequence {key:"file_id_sequence", value: 0})
 
 // Sequence for the folder ids 
 CREATE (s:Sequence {key:"folder_id_sequence", value: 0})
+
+// TODO: only 1 IS_INSIDE relationship between 2 entities + cannot have cycles 

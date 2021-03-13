@@ -101,19 +101,17 @@ func DBGetFile(fileId int) (*File, error) {
 	}
 
 	if file == nil {
-		return nil, errors.New("Could not find file for specified id")
+		return nil, errors.New("Could not find file for the specified id")
 	}
 
 	return file, err
 }
 
 func DBGetFoldersIn(folderId *int) (*[]Folder, error) {
-	// TODO check that the folder exist
 	return GetFoldersIn(folderId)
 }
 
 func DBGetFilesIn(folderId *int) (*[]File, error) {
-	// TODO check that the folder exist
 	return GetFilesIn(folderId)
 }
 
@@ -125,54 +123,38 @@ func DBCreateFile(name string, path string, parentId *int) (*int, error) {
 	return CreateFile(name, path, parentId)
 }
 
-// TODO
-func DBUpdateFolder(folderId int, name string) error {
-	// TODO
-	return errors.New("Not implemented yet")
+func DBUpdateFolder(folderID int, name string) error {
+	return UpdateFolder(folderID, name)
 }
 
-// TODO
-func DBMoveFolder(folderId int, targetParentId *int) error {
-	// TODO
-	return errors.New("Not implemented yet")
-}
-
-func DBMoveFile(fileId int, targetParentId *int) error {
-	toUpdateFile, ok := FilesMap[fileId]
-
-	if ok == false {
-		return errors.New("Could not find file for specified id")
+func DBMoveFolder(folderID int, destFolderID *int) error {
+	if destFolderID != nil {
+		if found, err := ExistsFolder(*destFolderID); err != nil || found != nil && *found == false {
+			return errors.New("The destination folder does not exist. Folder cannot be moved there.")
+		}
 	}
-
-	toUpdateFile.ParentId = targetParentId
-	return nil
+	return MoveFolder(folderID, destFolderID)
 }
 
-func removeFolders(folderIds []int) {
-	// TODO
+func DBMoveFile(fileID int, destFolderID *int) error {
+	if destFolderID != nil {
+		if found, err := ExistsFolder(*destFolderID); err != nil || found != nil && *found == false {
+			return errors.New("The destination folder does not exist. File cannot be moved there.")
+		}
+	}
+	return MoveFile(fileID, destFolderID)
 }
 
-func removeFiles(fileIds []int) {
-	// TODO
+func DBDeleteFolderAndContent(folderID int) error {
+	if found, err := ExistsFolder(folderID); err != nil || found != nil && *found == false {
+		return errors.New("The folder does not exist. It cannot be deleted.")
+	}
+	return DeleteFolderContent(folderID)
 }
 
-// TODO
-func DBDeleteFolderAndContent(folderId int) error {
-	// TODO
-	return errors.New("Not implemented yet")
-}
-
-// TODO
 func DBDeleteFile(fileId int) error {
-	fmt.Println("Deleting file", fileId)
-	_, ok := FilesMap[fileId]
-
-	if ok == false {
-		return errors.New("Could not find folder for specified id") // find a way to fire 404
+	if found, err := ExistsFile(fileId); err != nil || found != nil && *found == false {
+		return errors.New("The file does not exist. It cannot be deleted.")
 	}
-
-	toDeleteFileIds := []int{fileId}
-	removeFiles(toDeleteFileIds)
-
-	return nil
+	return DeleteFile(fileId)
 }
