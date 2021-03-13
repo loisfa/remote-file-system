@@ -37,13 +37,15 @@ var textFile2 = &File{
 	ParentId: &rootFolder.Id,
 }
 
-var FoldersMap map[int]*Folder = make(map[int]*Folder)
+// var FoldersMap map[int]*Folder = make(map[int]*Folder)
 var FilesMap map[int]*File = make(map[int]*File)
 
+/*
 // public for testing purpose
 func GetDbFolderMap() map[int]*Folder {
 	return FoldersMap
 }
+*/
 
 // public for testing purpose
 func GetDbFileMap() map[int]*File {
@@ -53,6 +55,7 @@ func GetDbFileMap() map[int]*File {
 var foldersAutoIncrementIndex int
 var filesAutoIncrementIndex int
 
+/*
 func InitDB() {
 	// TODO reuse the existing 'createXxx' methods to perform those operations
 	FoldersMap[rootFolder.Id] = rootFolder
@@ -66,6 +69,7 @@ func InitDB() {
 
 	return
 }
+*/
 
 // TODO rename all the DBGet... --> Get... (remove "DB" prefix)
 func DBGetFolder(folderId int) (*Folder, error) {
@@ -123,29 +127,14 @@ func DBCreateFile(name string, path string, parentId *int) (*int, error) {
 
 // TODO
 func DBUpdateFolder(folderId int, name string) error {
-	toUpdateFolder, ok := FoldersMap[folderId]
-
-	if ok == false {
-		return errors.New("Could not find folder for specified id")
-	}
-
-	toUpdateFolder.Name = name
-	return nil
+	// TODO
+	return errors.New("Not implemented yet")
 }
 
 // TODO
 func DBMoveFolder(folderId int, targetParentId *int) error {
-	if folderId == rootFolder.Id {
-		return errors.New("Illegal Operation: trying to move root folder")
-	}
-
-	toUpdateFolder, ok := FoldersMap[folderId]
-	if ok == false {
-		return errors.New("Could not find folder for specified id")
-	}
-
-	toUpdateFolder.ParentId = targetParentId
-	return nil
+	// TODO
+	return errors.New("Not implemented yet")
 }
 
 func DBMoveFile(fileId int, targetParentId *int) error {
@@ -159,78 +148,18 @@ func DBMoveFile(fileId int, targetParentId *int) error {
 	return nil
 }
 
-// TODO
-// could use goroutines with recursive?
-func getContentToDelete(folderId int) (toDeleteFolderIds []int, toDeleteFileIds []int) {
-
-	toDeleteFolderIds = []int{}
-
-	toDeleteFileIds = []int{}
-
-	for _, folder := range FoldersMap {
-		if folder.ParentId != nil && *(folder.ParentId) == folderId {
-			toDeleteFolderIds = append(toDeleteFolderIds, folder.Id)
-			break
-		}
-	}
-
-	for _, file := range FilesMap {
-		if file.ParentId != nil && *file.ParentId == folderId {
-			toDeleteFileIds = append(toDeleteFileIds, file.Id)
-			break
-		}
-	}
-
-	var innerToDeleteFolderIds, innerToDeleteFileIds []int
-	for _, id := range toDeleteFolderIds {
-		innerToDeleteFolderIds, innerToDeleteFileIds = getContentToDelete(id)
-	}
-
-	toDeleteFolderIds = append(toDeleteFolderIds, innerToDeleteFolderIds...)
-	toDeleteFileIds = append(toDeleteFileIds, innerToDeleteFileIds...)
-
-	return toDeleteFolderIds, toDeleteFileIds
-}
-
 func removeFolders(folderIds []int) {
-	for _, folderId := range folderIds {
-		delete(FoldersMap, folderId)
-	}
+	// TODO
 }
 
 func removeFiles(fileIds []int) {
-	for _, fileId := range fileIds {
-		file, ok := FilesMap[fileId]
-		if ok == true {
-			fmt.Println("Deleting file", file.Path) // TODO: delete the file actually from the file storage? (for now soft delete)
-			delete(FilesMap, fileId)
-		}
-	}
+	// TODO
 }
 
 // TODO
 func DBDeleteFolderAndContent(folderId int) error {
-	if folderId == rootFolder.Id {
-		return errors.New("Illegal Operation: trying to delete root folder.")
-	}
-
-	fmt.Println("Deleting db folder (and chidren)", folderId)
-	_, ok := FoldersMap[folderId]
-
-	if ok == false {
-		return errors.New("Could not find folder for specified id")
-	}
-
-	toDeleteFolderIds, toDeleteFileIds := getContentToDelete(folderId)
-	toDeleteFolderIds = append(toDeleteFolderIds, folderId)
-
-	fmt.Println("Folders to remove", len(toDeleteFolderIds))
-	fmt.Println("Files to remove", len(toDeleteFileIds))
-
-	removeFiles(toDeleteFileIds)
-	removeFolders(toDeleteFolderIds)
-
-	return nil
+	// TODO
+	return errors.New("Not implemented yet")
 }
 
 // TODO

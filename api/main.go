@@ -72,13 +72,13 @@ func getContentIn(folderId *int) (*ApiFolderContent, error) {
 			currentFolder.ParentId}
 	}
 
-	var apiFolders []ApiFolder
+	apiFolders := make([]ApiFolder, 0)
 	for idx := range *subFolders {
 		folder := (*subFolders)[idx]
 		apiFolders = append(apiFolders, mapFolderToApiFolder(folder))
 	}
 
-	var apiFiles []ApiFile
+	apiFiles := make([]ApiFile, 0)
 	for idx := range *files {
 		file := (*files)[idx]
 		apiFiles = append(apiFiles, mapFileToApiFile(file))
@@ -176,8 +176,11 @@ func createFolder(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	fmt.Println("createFolder: about to create the folder")
 	id, err := fsmanager.DBCreateFolder(folder.Name, destFolderId)
 	if err != nil {
+		fmt.Println("err.Error()")
+		fmt.Println(err.Error())
 		http.Error(w, err.Error(), 500) // TODO improve
 		return
 	}

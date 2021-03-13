@@ -106,7 +106,8 @@ func mapRecordToFolder(record *neo4j.Record) (*Folder, error) {
 
 func mapResultToFolders(result neo4j.Result) (*[]Folder, error) {
 	var folders []Folder
-	fmt.Println("mapResultToFolders input result: %v", result)
+	fmt.Println("mapResultToFolders input result:")
+	fmt.Println(result)
 	for result.Next() == true {
 		fmt.Println("result.Next() == true")
 		record := result.Record()
@@ -206,7 +207,6 @@ func getRootFilesQuery() (string, map[string]interface{}, func(result neo4j.Resu
 	return `MATCH (file:File)
 		WHERE NOT (file)-[:IS_INSIDE]->(:Folder)
 		RETURN file`, make(map[string]interface{}), mapResultToFiles
-
 }
 
 func getRootFoldersQuery() (string, map[string]interface{}, func(result neo4j.Result) (*[]Folder, error)) {
@@ -217,8 +217,8 @@ func getRootFoldersQuery() (string, map[string]interface{}, func(result neo4j.Re
 
 func getFilesInFolderQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*[]File, error)) {
 	return `MATCH (parentFolder:Folder{id: $folderID})
-	MATCH (folder:Folder)-[:IS_INSIDE]->(parentFolder)
-	RETURN folder`,
+	MATCH (file:File)-[:IS_INSIDE]->(parentFolder)
+	RETURN file`,
 		map[string]interface{}{
 			"folderID": folderID,
 		}, mapResultToFiles
@@ -226,8 +226,8 @@ func getFilesInFolderQuery(folderID int) (string, map[string]interface{}, func(r
 
 func getFoldersInFolderQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*[]Folder, error)) {
 	return `MATCH (parentFolder:Folder{id: $folderID})
-	MATCH (file:Folder)-[:IS_INSIDE]->(parentFolder)
-	RETURN file`,
+	MATCH (folder:Folder)-[:IS_INSIDE]->(parentFolder)
+	RETURN folder`,
 		map[string]interface{}{
 			"folderID": folderID,
 		},
@@ -263,9 +263,9 @@ func createNewFileWithoutParentQuery(fileName string, filePath string) (string, 
 
 func createNewFolderWithParentQuery(folderName string, parentFolderID int) (string, map[string]interface{}) {
 	return `MATCH (parentFolder:Folder{id: $parentFolderID})
-	MATCH (seq:Sequence {key:'folder_id_sequence'})"
-	CALL apoc.atomic.add(seq, 'value', 1, 5)"
-	YIELD newValue as folder_id"
+	MATCH (seq:Sequence {key:'folder_id_sequence'})
+	CALL apoc.atomic.add(seq, 'value', 1, 5)
+	YIELD newValue as folder_id
 	CREATE (folder:Folder { id: folder_id, name: $folderName})
 	CREATE (folder)-[:IS_INSIDE]->(parentFolder)
 	RETURN folder.id AS folderID`,
@@ -283,6 +283,24 @@ func createNewFolderWithoutParentQuery(folderName string) (string, map[string]in
 	RETURN folder.id AS folderID`,
 		map[string]interface{}{
 			"folderName": folderName,
+		}
+}
+
+func updateFolderQuery(folderId int, folderName string) (string, map[string]interface{}) {
+	return `MATCH (folder:Folder {id: $folderId})
+	SET folder.name = $folderName`,
+		map[string]interface{}{
+			"folderId":   folderId,
+			"folderName": folderName,
+		}
+}
+
+func updateFileQuery(fileId int, fileName string) (string, map[string]interface{}) {
+	return `MATCH (file:File {id: $fileId})
+	SET file.name = $fileName`,
+		map[string]interface{}{
+			"fileId":   fileId,
+			"fileName": fileName,
 		}
 }
 
@@ -450,6 +468,7 @@ func GetFoldersIn(folderID *int) (*[]Folder, error) {
 		if folderID == nil {
 			query, queryMap, mapResultToFoldersFn = getRootFoldersQuery()
 		} else {
+			fmt.Println("Running methid: getFoldersInFolderQuery")
 			query, queryMap, mapResultToFoldersFn = getFoldersInFolderQuery(*folderID)
 		}
 
@@ -459,6 +478,8 @@ func GetFoldersIn(folderID *int) (*[]Folder, error) {
 			fmt.Println("Error on transaction run")
 			return nil, err
 		}
+		fmt.Println("Folder Result from neo4j:")
+		fmt.Println(result)
 		return mapResultToFoldersFn(result)
 	})
 
@@ -469,7 +490,8 @@ func GetFoldersIn(folderID *int) (*[]Folder, error) {
 		return nil, err
 	}
 
-	fmt.Println("Here is the result of GetFoldersIn %+v", result)
+	fmt.Println("Here is the result of GetFoldersIn %+v:")
+	fmt.Println(result)
 	return result.(*[]Folder), nil
 }
 

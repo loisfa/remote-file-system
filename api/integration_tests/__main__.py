@@ -36,16 +36,31 @@ assert response.status_code, "Wrong http code received on retrieve non-existing 
 to_create_folder = CreateFolderDTO("Folder 1", None)
 response = session.post(ROOT_URL + "/folders", to_create_folder.toJson())
 assert response.status_code == 201, "Wrong http code received on create new folder in root folder: " + str(response.status_code)
-created_folder_id = response.text
+created_folder1_id = response.text
 # Check whether the folder was created
 response = session.get(ROOT_URL + "/folders")
 body = json.loads(response.text)
 folders = body['folders']
 found_created_folder = False
 for folder in folders:
-    if str(folder['id']) == str(created_folder_id):
+    if str(folder['id']) == str(created_folder1_id):
         found_created_folder = True
         assert folder['name'] == "Folder 1", "The name of the folder just created is wrong"
+assert found_created_folder == True, "Could not find the folder just created"
+# Create a folder inside the created folder
+to_create_folder = CreateFolderDTO("Folder 2", int(created_folder1_id))
+response = session.post(ROOT_URL + "/folders", to_create_folder.toJson())
+assert response.status_code == 201, "Wrong http code received on create new folder in root folder: " + str(response.status_code)
+created_folder2_id = response.text
+# Check whether the folder was created
+response = session.get(ROOT_URL + "/folders/" + str(created_folder1_id))
+body = json.loads(response.text)
+folders = body['folders']
+found_created_folder = False
+for folder in folders:
+    if str(folder['id']) == str(created_folder2_id):
+        found_created_folder = True
+        assert folder['name'] == "Folder 2", "The name of the folder just created is wrong"
 assert found_created_folder == True, "Could not find the folder just created"
 
 ### UPDATE FOLDER
