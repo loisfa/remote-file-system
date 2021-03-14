@@ -33,24 +33,19 @@ type ApiFile struct {
 }
 
 type ApiFolderContent struct {
-	CurrentFolder *ApiFolder  `json:"currentFolder"` // nil in case of root folder
+	CurrentFolder ApiFolder   `json:"currentFolder"` // nil in case of root folder
 	Folders       []ApiFolder `json:"folders"`       // readonly
 	Files         []ApiFile   `json:"files"`         // readonly
 }
 
 // TODO why upper case? Is not exposed outside this package
-func getContentIn(folderId *int) (*ApiFolderContent, error) {
+func getContentIn(folderId int) (*ApiFolderContent, error) {
 	fmt.Println("Getting content in folder %d", folderId)
 
-	var currentFolder *fsmanager.Folder
-	if folderId != nil {
-
-		var err error
-		currentFolder, err = fsmanager.DBGetFolder(*folderId)
-		fmt.Println("current folder: ", currentFolder, " - err: ", err)
-		if err != nil {
-			return nil, err
-		}
+	fmt.Println("Getting DBGetFolder folder %d", folderId)
+	currentFolder, err := fsmanager.DBGetFolder(folderId)
+	if err != nil {
+		return nil, err
 	}
 
 	fmt.Println("Getting DBGetFoldersIn folder %d", folderId)
@@ -65,13 +60,10 @@ func getContentIn(folderId *int) (*ApiFolderContent, error) {
 		return nil, err
 	}
 
-	var apiCurrentFolder *ApiFolder
-	if currentFolder != nil {
-		apiCurrentFolder = &ApiFolder{
-			currentFolder.Id,
-			currentFolder.Name,
-			currentFolder.ParentId}
-	}
+	apiCurrentFolder := ApiFolder{
+		(*currentFolder).Id,
+		(*currentFolder).Name,
+		(*currentFolder).ParentId}
 
 	apiFolders := make([]ApiFolder, 0)
 	for idx := range *subFolders {
@@ -142,7 +134,7 @@ func getFolderContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiFolderContent, err := getContentIn(&folderId)
+	apiFolderContent, err := getContentIn(folderId)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -158,7 +150,13 @@ func getFolderContent(w http.ResponseWriter, r *http.Request) {
 }
 
 func getRootFolderContent(w http.ResponseWriter, r *http.Request) {
-	apiFolderContent, err := getContentIn(nil) // 0 magic number! TODO use the map instead to retrieve root folder
+	id, err := fsmanager.GetRootFolderID()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	apiFolderContent, err := getContentIn(*id) // 0 magic number! TODO use the map instead to retrieve root folder
 
 	if err != nil {
 		http.Error(w, err.Error(), 404)
@@ -179,15 +177,17 @@ func createFolder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	destFolderId := folder.ParentId
-	if destFolderId != nil {
-		if exists, err := fsmanager.DBExistsFolder(*destFolderId); err != nil || exists == nil || !*exists {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
+	if destFolderId == nil {
+		http.Error(w, "No destination folder id passed as input", http.StatusBadRequest)
+		return
+	}
+	if exists, err := fsmanager.DBExistsFolder(*destFolderId); err != nil || exists == nil || !*exists {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	fmt.Println("createFolder: about to create the folder")
-	id, err := fsmanager.DBCreateFolder(folder.Name, destFolderId)
+	id, err := fsmanager.DBCreateFolder(folder.Name, *destFolderId)
 	if err != nil {
 		fmt.Println("err.Error()")
 		fmt.Println(err.Error())
@@ -262,7 +262,6 @@ func moveFolder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Println("folderId", folderId)
-	var destFolderId *int
 	var destFolderIdInt int
 	destFolderIdStr := vars["destFolderId"]
 	if destFolderIdInt, err = strconv.Atoi(destFolderIdStr); err != nil {
@@ -270,10 +269,7 @@ func moveFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	destFolderId = &destFolderIdInt
-	fmt.Println("destFolderId", destFolderId)
-
-	err = fsmanager.DBMoveFolder(folderId, destFolderId)
+	err = fsmanager.DBMoveFolder(folderId, destFolderIdInt)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -316,7 +312,6 @@ func moveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var destFolderId *int
 	var destFolderIdInt int
 	destFolderIdStr := vars["destFolderId"]
 	fmt.Println("destFolderId: " + destFolderIdStr)
@@ -324,9 +319,8 @@ func moveFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	destFolderId = &destFolderIdInt
 
-	err = fsmanager.DBMoveFile(fileId, destFolderId)
+	err = fsmanager.DBMoveFile(fileId, destFolderIdInt)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -340,21 +334,14 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 
-	var destFolderId *int
+	var destFolderId int
 	if destFolderIdStr, found := vars["destFolderId"]; found {
 		id, err := strconv.Atoi(destFolderIdStr)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		destFolderId = &id
-	}
-
-	if destFolderId != nil {
-		if exists, err := fsmanager.DBExistsFolder(*destFolderId); err != nil || exists == nil || !*exists {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
+		destFolderId = id
 	}
 
 	// 10 << 20 specifies a maximum upload of 10 MB files.
@@ -418,6 +405,7 @@ func main() {
 	r.HandleFunc("/folders", createFolder).Methods(http.MethodPost)
 
 	r.HandleFunc("/folders/{folderId:[0-9]+}", updateFolder).Methods(http.MethodPut)
+
 	r.HandleFunc("/folders/{folderId:[0-9]+}", deleteFolderAndContent).Methods(http.MethodDelete, http.MethodOptions) // SEE if can delete methodOptions
 
 	r.HandleFunc("/MoveFolder/{folderId:[0-9]+}", moveFolder).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
@@ -432,7 +420,6 @@ func main() {
 	r.HandleFunc("/DownloadFile/{fileId:[0-9]+}", serveFile).Methods(http.MethodGet)
 
 	r.HandleFunc("/UploadFile", uploadFile).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPost)
-	r.HandleFunc("/UploadFile", uploadFile).Methods(http.MethodPost)
 
 	r.HandleFunc("/MoveFile/{fileId:[0-9]+}", moveFile).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
 

@@ -1,80 +1,19 @@
 package fsmanager
 
-// TODO try neo4j to model the graph structure:
-// https://stackoverflow.com/questions/31079881/simple-recursive-cypher-query
-
 import (
 	"errors"
 	"fmt"
 )
 
-var rootFolder = &Folder{
-	Id:       0,
-	Name:     "",
-	ParentId: nil,
+// TODO rename all the DBGet... --> Get... (remove "DB" prefix)
+func DBGetRootFolderID() (id *int, err error) {
+	return GetRootFolderID()
 }
-var photosFolder = &Folder{
-	Id:       1,
-	Name:     "Photos",
-	ParentId: &(rootFolder.Id),
-}
-var summerPhotosFolder = &Folder{
-	Id:       2,
-	Name:     "Summer",
-	ParentId: &(photosFolder.Id),
-}
-
-var textFile1 = &File{
-	Id:       0,
-	Name:     "file1.txt",
-	Path:     "temp-files/file1.txt",
-	ParentId: &photosFolder.Id,
-}
-var textFile2 = &File{
-	Id:       1,
-	Name:     "file2.txt",
-	Path:     "temp-files/file2.txt",
-	ParentId: &rootFolder.Id,
-}
-
-// var FoldersMap map[int]*Folder = make(map[int]*Folder)
-var FilesMap map[int]*File = make(map[int]*File)
-
-/*
-// public for testing purpose
-func GetDbFolderMap() map[int]*Folder {
-	return FoldersMap
-}
-*/
-
-// public for testing purpose
-func GetDbFileMap() map[int]*File {
-	return FilesMap
-}
-
-var foldersAutoIncrementIndex int
-var filesAutoIncrementIndex int
-
-/*
-func InitDB() {
-	// TODO reuse the existing 'createXxx' methods to perform those operations
-	FoldersMap[rootFolder.Id] = rootFolder
-	FoldersMap[photosFolder.Id] = photosFolder
-	FoldersMap[summerPhotosFolder.Id] = summerPhotosFolder
-	foldersAutoIncrementIndex = 3
-
-	FilesMap[textFile1.Id] = textFile1
-	FilesMap[textFile2.Id] = textFile2
-	filesAutoIncrementIndex = 2
-
-	return
-}
-*/
 
 // TODO rename all the DBGet... --> Get... (remove "DB" prefix)
-func DBGetFolder(folderId int) (*Folder, error) {
-	fmt.Println("DBGetFolder: Getting folder in %d", folderId)
-	exists, err := ExistsFolder(folderId)
+func DBGetFolder(folderID int) (*Folder, error) {
+	fmt.Println("DBGetFolder: Getting folder in %d", folderID)
+	exists, err := ExistsFolder(folderID)
 	fmt.Println("DBGetFolder: exists: ", exists, "-- err: ", err)
 	if err != nil {
 		return nil, err
@@ -83,19 +22,19 @@ func DBGetFolder(folderId int) (*Folder, error) {
 		return nil, nil
 	}
 
-	folder, err := GetFolder(folderId)
+	folder, err := GetFolder(folderID)
 	if err != nil {
 		return nil, err
 	}
 	return folder, err
 }
 
-func DBExistsFolder(folderId int) (*bool, error) {
-	return ExistsFolder(folderId)
+func DBExistsFolder(folderID int) (*bool, error) {
+	return ExistsFolder(folderID)
 }
 
-func DBGetFile(fileId int) (*File, error) {
-	file, err := GetFile(fileId)
+func DBGetFile(fileID int) (*File, error) {
+	file, err := GetFile(fileID)
 	if err != nil {
 		return nil, err
 	}
@@ -107,40 +46,47 @@ func DBGetFile(fileId int) (*File, error) {
 	return file, err
 }
 
-func DBGetFoldersIn(folderId *int) (*[]Folder, error) {
-	return GetFoldersIn(folderId)
+// TODO could have one single database call to return currentFolder, folders, files
+func DBGetFoldersIn(folderID int) (*[]Folder, error) {
+	return GetFoldersIn(folderID)
 }
 
-func DBGetFilesIn(folderId *int) (*[]File, error) {
-	return GetFilesIn(folderId)
+func DBGetFilesIn(folderID int) (*[]File, error) {
+	return GetFilesIn(folderID)
 }
 
-func DBCreateFolder(name string, parentId *int) (*int, error) {
-	return CreateFolder(name, parentId)
+func DBCreateFolder(name string, parentID int) (*int, error) {
+	return CreateFolder(name, parentID)
 }
 
-func DBCreateFile(name string, path string, parentId *int) (*int, error) {
-	return CreateFile(name, path, parentId)
+func DBCreateFile(name string, path string, parentID int) (*int, error) {
+	return CreateFile(name, path, parentID)
 }
 
 func DBUpdateFolder(folderID int, name string) error {
 	return UpdateFolder(folderID, name)
 }
 
-func DBMoveFolder(folderID int, destFolderID *int) error {
-	if destFolderID != nil {
-		if found, err := ExistsFolder(*destFolderID); err != nil || found != nil && *found == false {
-			return errors.New("The destination folder does not exist. Folder cannot be moved there.")
-		}
+func DBMoveFolder(folderID int, destFolderID int) error {
+	if found, err := ExistsFolder(destFolderID); err != nil || found != nil && *found == false {
+		return errors.New("The destination folder does not exist. Folder cannot be moved there.")
 	}
+
+	if found, err := ExistsFolder(folderID); err != nil || found != nil && *found == false {
+		return errors.New("The folder was not found.")
+	}
+
+	fmt.Println("DBMoveFolder about to check")
+	if isRoot, err := IsRootFolder(folderID); err != nil || isRoot != nil && *isRoot == true {
+		return errors.New("Cannot perform 'Move' operation on the root folder")
+	}
+
 	return MoveFolder(folderID, destFolderID)
 }
 
-func DBMoveFile(fileID int, destFolderID *int) error {
-	if destFolderID != nil {
-		if found, err := ExistsFolder(*destFolderID); err != nil || found != nil && *found == false {
-			return errors.New("The destination folder does not exist. File cannot be moved there.")
-		}
+func DBMoveFile(fileID int, destFolderID int) error {
+	if found, err := ExistsFolder(destFolderID); err != nil || found != nil && *found == false {
+		return errors.New("The destination folder does not exist. File cannot be moved there.")
 	}
 	return MoveFile(fileID, destFolderID)
 }
@@ -149,12 +95,17 @@ func DBDeleteFolderAndContent(folderID int) error {
 	if found, err := ExistsFolder(folderID); err != nil || found != nil && *found == false {
 		return errors.New("The folder does not exist. It cannot be deleted.")
 	}
+
+	if isRoot, err := IsRootFolder(folderID); err != nil || isRoot != nil && *isRoot == true {
+		return errors.New("Trying to delete the root folder. Operation not permitted")
+	}
+
 	return DeleteFolderContent(folderID)
 }
 
-func DBDeleteFile(fileId int) error {
-	if found, err := ExistsFile(fileId); err != nil || found != nil && *found == false {
+func DBDeleteFile(fileID int) error {
+	if found, err := ExistsFile(fileID); err != nil || found != nil && *found == false {
 		return errors.New("The file does not exist. It cannot be deleted.")
 	}
-	return DeleteFile(fileId)
+	return DeleteFile(fileID)
 }

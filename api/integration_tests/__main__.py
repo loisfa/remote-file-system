@@ -25,9 +25,8 @@ if (response.status_code != 200):
 response = session.get(ROOT_URL + "/folders")
 assert response.status_code == 200, "Wrong http code received on retrieve root folder"
 body = json.loads(response.text)
-
-# NOT WORKING ANYMORE: root_folder_id = body['currentFolder']['id']
-# NOT WORKING ANYMORE: assert root_folder_id is not None, "root folder id is null"
+root_folder_id = body['currentFolder']['id']
+assert root_folder_id is not None, "root folder id is null"
 
 # Ensures GET on non-existing folder returns 404 
 response = session.get(ROOT_URL + "/folders/123456")
@@ -35,9 +34,9 @@ assert response.status_code, "Wrong http code received on retrieve non-existing 
 
 ### CREATE FOLDER
 # Create a folder inside the root folder
-to_create_folder = CreateFolderDTO("Folder 1", None)
+to_create_folder = CreateFolderDTO("Folder 1", int(root_folder_id))
 response = session.post(ROOT_URL + "/folders", to_create_folder.toJson())
-assert response.status_code == 201, "Wrong http code received on create new folder in root folder"
+assert response.status_code == 201, "Wrong http code received on create new folder in root folder: " + str(response.status_code)
 created_folder_id = response.text
 # Check whether the folder was created
 response = session.get(ROOT_URL + "/folders")
@@ -52,12 +51,12 @@ assert found_created_folder == True, "Could not find the folder just created"
 
 ### UPDATE FOLDER
 # Updated root name
-# NOT WORKING ANYMORE: to_update_folder = UpdateFolderDTO("Root folder new name", None)
-# NOT WORKING ANYMORE: response = session.put(ROOT_URL + "/folders/" + str(root_folder_id), to_update_folder.toJson())
-# NOT WORKING ANYMORE: assert response.status_code == 204, "Wrong http code received on folder update: " + str(response.status_code)
-# NOT WORKING ANYMORE: response = session.get(ROOT_URL + "/folders")
-# NOT WORKING ANYMORE: body = json.loads(response.text)
-# NOT WORKING ANYMORE: assert body['currentFolder']['name'] == "Root folder new name", "Wrong name for root folder on update"
+to_update_folder = UpdateFolderDTO("Root folder new name", None)
+response = session.put(ROOT_URL + "/folders/" + str(root_folder_id), to_update_folder.toJson())
+assert response.status_code == 204, "Wrong http code received on folder update: " + str(response.status_code)
+response = session.get(ROOT_URL + "/folders")
+body = json.loads(response.text)
+assert body['currentFolder']['name'] == "Root folder new name", "Wrong name for root folder on update"
 
 # Update created folder's name
 to_update_folder = UpdateFolderDTO("Folder 1.1", None)
@@ -70,10 +69,10 @@ assert body['currentFolder']['name'] == "Folder 1.1", "The name of the folder ju
 
 ### MOVE FOLDER
 # Ensure cannot move root folder
-# NOT WORKING ANYMORE: response = session.put(ROOT_URL + "/MoveFolder/" + str(root_folder_id) + "?dest=" + str(created_folder_id))
-# NOT WORKING ANYMORE: assert response.status_code == 500, "Wrong http code received on move folder: " + str(response.status_code)
+response = session.put(ROOT_URL + "/MoveFolder/" + str(root_folder_id) + "?dest=" + str(created_folder_id))
+assert response.status_code == 500, "Wrong http code received on move folder: " + str(response.status_code)
 # Create folder 2 in the root
-to_create_folder_2 = CreateFolderDTO("Folder 2", None)
+to_create_folder_2 = CreateFolderDTO("Folder 2", int(root_folder_id))
 response = session.post(ROOT_URL + "/folders", to_create_folder_2.toJson())
 assert response.status_code == 201, "Wrong http code received on create new folder in root folder"
 created_folder_2_id = response.text
@@ -102,8 +101,8 @@ assert found_created_folder == True, "Could not find the updated folder"
 
 ### DELETE A FOLDER
 # Ensure cannot delete root folder
-# NOT WORKING ANYMORE: response = session.delete(ROOT_URL + "/folders")
-# NOT WORKING ANYMORE: assert response.status_code == 400, "Wrong http code received on delete root folder: " + str(response.status_code)
+response = session.delete(ROOT_URL + "/folders/" + str(root_folder_id))
+assert response.status_code == 400, "Wrong http code received on delete root folder: " + str(response.status_code)
 # Delete folder 1
 response = session.delete(ROOT_URL + "/folders/" + str(created_folder_id))
 assert response.status_code == 204, "Wrong http code received on delete folder 1: " + str(response.status_code)
@@ -147,7 +146,7 @@ file1.close()
 
 ### UPLOAD A FILE IN ROOT FOLDER
 response = session.post(
-    ROOT_URL + "/UploadFile", 
+    ROOT_URL + "/UploadFile?dest=" + str(root_folder_id), 
     files = { 'upload': open(file1_path, 'rb') })
 assert response.status_code == 201, "Wrong http code received on create file in root folder: " + str(response.status_code)
 body = json.loads(response.text)
@@ -230,7 +229,7 @@ assert response.status_code == 404, "Wrong http code received on trying to acces
 # /folder1/file.txt
 # /folder1/folder1.2/file.txt
 # Create /folder1
-to_create_folder1 = CreateFolderDTO("folder1", None)
+to_create_folder1 = CreateFolderDTO("folder1", root_folder_id)
 response = session.post(ROOT_URL + "/folders", to_create_folder1.toJson())
 assert response.status_code == 201, "Wrong http code received on create /folder1 in root folder: " + str(response.status_code)
 created_folder1_id: int = int(response.text)

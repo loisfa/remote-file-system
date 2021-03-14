@@ -1,5 +1,7 @@
 package fsmanager
 
+// TODO move in a fsrepository package
+
 import (
 	"errors"
 	"fmt"
@@ -104,6 +106,15 @@ func mapRecordToFolder(record *neo4j.Record) (*Folder, error) {
 	}, nil
 }
 
+func mapRecordToFolderID(record *neo4j.Record) (*int, error) {
+	folder, err := mapRecordToFolder(record)
+	if err != nil {
+		return nil, err
+	}
+
+	return &folder.Id, nil
+}
+
 func mapResultToFolders(result neo4j.Result) (*[]Folder, error) {
 	var folders []Folder
 	fmt.Println("mapResultToFolders input result:")
@@ -179,6 +190,58 @@ func getFolderByID(folderID int) (string, map[string]interface{}, func(result ne
 		}
 }
 
+// Use this method only in required case since it increments the folder_id_sequence even if no root folder to create
+func createRootFolderIfNotExistsQuery() (string, map[string]interface{}) {
+	return `MATCH (seq:Sequence {key:'folder_id_sequence'})
+		CALL apoc.atomic.add(seq, 'value', 1, 5)
+		YIELD newValue as folder_id
+		
+		MERGE (root:Folder {is_root: true})
+			ON CREATE
+        		SET root.id = folder_id
+        		SET root.is_root = true
+        		SET root.name = 'Root folder'
+		RETURN root.id as folderID`,
+		make(map[string]interface{})
+}
+
+func getRootFolderIDQuery() (string, map[string]interface{}, func(result neo4j.Result) (*int, error)) {
+	return `MATCH (root:Folder {is_root: true})
+		RETURN root as folder`,
+		make(map[string]interface{}),
+		func(result neo4j.Result) (*int, error) {
+			record, err := result.Single()
+			if err != nil {
+				return nil, err
+			}
+
+			folder, _ := record.Get(dbFolder)
+			fmt.Println("getRootFolderIDQuery - folder:")
+			fmt.Println(folder)
+			return mapRecordToFolderID(record)
+		}
+}
+
+// Suppose you already have checked the folder exists
+func isRootFolderQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*bool, error)) {
+	return `MATCH (folder:Folder {id: $folderID})
+		RETURN exists(folder.is_root) and folder.is_root = true`,
+		map[string]interface{}{
+			"folderID": folderID},
+		func(result neo4j.Result) (*bool, error) {
+			record, err := result.Single()
+			if err != nil {
+				return nil, err
+			}
+
+			fmt.Println("isRootFolderQuery - record:")
+			fmt.Printf("%+v\n", record)
+			isRoot := record.Values[0].(bool)
+			fmt.Printf("%+v\n", isRoot)
+			return &isRoot, nil
+		}
+}
+
 func existsFolderByID(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*bool, error)) {
 	return `OPTIONAL MATCH (folder:Folder{id: $folderID})
 		RETURN folder IS NOT NULL AS exists`,
@@ -203,17 +266,21 @@ func existsFolderByID(folderID int) (string, map[string]interface{}, func(result
 		}
 }
 
+/*
 func getRootFilesQuery() (string, map[string]interface{}, func(result neo4j.Result) (*[]File, error)) {
 	return `MATCH (file:File)
 		WHERE NOT (file)-[:IS_INSIDE]->(:Folder)
 		RETURN file`, make(map[string]interface{}), mapResultToFiles
 }
+*/
 
+/*
 func getRootFoldersQuery() (string, map[string]interface{}, func(result neo4j.Result) (*[]Folder, error)) {
 	return `MATCH (folder:Folder)
 		WHERE NOT (folder)-[:IS_INSIDE]->(:Folder)
 		RETURN folder`, make(map[string]interface{}), mapResultToFolders
 }
+*/
 
 func getFilesInFolderQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*[]File, error)) {
 	return `MATCH (parentFolder:Folder{id: $folderID})
@@ -249,6 +316,7 @@ func createNewFileWithParentQuery(fileName string, filePath string, parentFolder
 		}
 }
 
+/*
 func createNewFileWithoutParentQuery(fileName string, filePath string) (string, map[string]interface{}) {
 	return `MATCH (seq:Sequence {key:'file_id_sequence'})
 	CALL apoc.atomic.add(seq, 'value', 1, 5)
@@ -260,6 +328,7 @@ func createNewFileWithoutParentQuery(fileName string, filePath string) (string, 
 			"filePath": filePath,
 		}
 }
+*/
 
 func createNewFolderWithParentQuery(folderName string, parentFolderID int) (string, map[string]interface{}) {
 	return `MATCH (parentFolder:Folder{id: $parentFolderID})
@@ -275,6 +344,7 @@ func createNewFolderWithParentQuery(folderName string, parentFolderID int) (stri
 		}
 }
 
+/*
 func createNewFolderWithoutParentQuery(folderName string) (string, map[string]interface{}) {
 	return `MATCH (seq:Sequence {key:'folder_id_sequence'})
 	CALL apoc.atomic.add(seq, 'value', 1, 5)
@@ -285,6 +355,7 @@ func createNewFolderWithoutParentQuery(folderName string) (string, map[string]in
 			"folderName": folderName,
 		}
 }
+*/
 
 func updateFolderQuery(folderID int, folderName string) (string, map[string]interface{}) {
 	return `MATCH (folder:Folder {id: $folderID})
@@ -304,6 +375,7 @@ func updateFileQuery(fileId int, fileName string) (string, map[string]interface{
 		}
 }
 
+/*
 func moveFolderToRootFolderQuery(folderId int) (string, map[string]interface{}) {
 	return `MATCH (folder:Folder {id: $folderId})
 	OPTIONAL MATCH (folder)-[rel:IS_INSIDE]->()
@@ -312,6 +384,7 @@ func moveFolderToRootFolderQuery(folderId int) (string, map[string]interface{}) 
 			"folderId": folderId,
 		}
 }
+*/
 
 func moveFolderQuery(folderID int, destFolderID int) (string, map[string]interface{}) {
 	return `MATCH (folder:Folder {id: $folderID})
@@ -337,6 +410,7 @@ func moveFileQuery(fileID int, destFolderID int) (string, map[string]interface{}
 		}
 }
 
+/*
 func moveFileToRootFolderQuery(fileID int) (string, map[string]interface{}) {
 	return `MATCH (file:File {id: $fileID})
 	OPTIONAL MATCH (file)-[rel:IS_INSIDE]->()
@@ -345,13 +419,13 @@ func moveFileToRootFolderQuery(fileID int) (string, map[string]interface{}) {
 			"fileID": fileID,
 		}
 }
+*/
 
 // Return the ids of all the deleted items?
 func deleteFolderContentQuery(folderID int) (string, map[string]interface{}) {
-	return `OPTIONAL MATCH (files:File)-[:IS_INSIDE *1..]->(Folder {id: $folderID})
-	OPTIONAL MATCH (folders:Folder)-[:IS_INSIDE *1..]->(Folder {id: $folderID})
+	return `OPTIONAL MATCH (f)-[:IS_INSIDE *1..]->(Folder {id: $folderID})
 	OPTIONAL MATCH (folder:Folder {id: $folderID})
-	DETACH DELETE files, folders, folder`,
+	DETACH DELETE f, folder`,
 		map[string]interface{}{
 			"folderID": folderID,
 		}
@@ -441,20 +515,12 @@ func ExistsFile(fileID int) (*bool, error) {
 	return result.(*bool), nil
 }
 
-func GetFilesIn(folderID *int) (*[]File, error) {
+func GetFilesIn(folderID int) (*[]File, error) {
 	session := getDriver().NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		var query string
-		var queryMap map[string]interface{}
-		var mapResultToFilesFn func(neo4j.Result) (*[]File, error)
-		if folderID == nil {
-			query, queryMap, mapResultToFilesFn = getRootFilesQuery()
-		} else {
-			query, queryMap, mapResultToFilesFn = getFilesInFolderQuery(*folderID)
-		}
-
+		query, queryMap, mapResultToFilesFn := getFilesInFolderQuery(folderID)
 		result, err := tx.Run(query, queryMap)
 		if err != nil {
 			fmt.Println("Error on transaction run")
@@ -497,6 +563,58 @@ func GetFolder(folderID int) (*Folder, error) {
 	return result.(*Folder), nil
 }
 
+func GetRootFolderID() (*int, error) {
+	session := getDriver().NewSession(neo4j.SessionConfig{})
+	defer session.Close()
+
+	fmt.Println("GetFolder: Gettign root folder ID")
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		query, queryMap, mapResultToFolderIDFn := getRootFolderIDQuery()
+		result, err := tx.Run(query, queryMap)
+		if err != nil {
+			fmt.Println("Error on transaction run get root folder id")
+			return nil, err
+		}
+		return mapResultToFolderIDFn(result)
+	})
+
+	if err != nil {
+		fmt.Println("Transaction failure")
+		return nil, err
+	}
+
+	fmt.Println("Result from get root folder id")
+	fmt.Println("%v", result)
+	return result.(*int), nil
+}
+
+func IsRootFolder(folderID int) (*bool, error) {
+	session := getDriver().NewSession(neo4j.SessionConfig{})
+	defer session.Close()
+
+	fmt.Println("IsRootFolder")
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		query, queryMap, mapResultToIsRootFolderFn := isRootFolderQuery(folderID)
+		result, err := tx.Run(query, queryMap)
+		if err != nil {
+			fmt.Println("Error on transaction run is root folder")
+			return nil, err
+		}
+		return mapResultToIsRootFolderFn(result)
+	})
+
+	if err != nil {
+		fmt.Println("Transaction failure")
+		return nil, err
+	}
+
+	fmt.Println("Result from is root folder")
+	fmt.Println("%v", result)
+	return result.(*bool), nil
+}
+
 func ExistsFolder(folderID int) (*bool, error) {
 	session := getDriver().NewSession(neo4j.SessionConfig{})
 	defer session.Close()
@@ -519,22 +637,12 @@ func ExistsFolder(folderID int) (*bool, error) {
 	return result.(*bool), nil
 }
 
-func GetFoldersIn(folderID *int) (*[]Folder, error) {
+func GetFoldersIn(folderID int) (*[]Folder, error) {
 	session := getDriver().NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		var query string
-		var queryMap map[string]interface{}
-		var mapResultToFoldersFn func(neo4j.Result) (*[]Folder, error)
-		if folderID == nil {
-			query, queryMap, mapResultToFoldersFn = getRootFoldersQuery()
-		} else {
-			fmt.Println("Running methid: getFoldersInFolderQuery")
-			query, queryMap, mapResultToFoldersFn = getFoldersInFolderQuery(*folderID)
-		}
-
-		fmt.Println("About to run transaction")
+		query, queryMap, mapResultToFoldersFn := getFoldersInFolderQuery(folderID)
 		result, err := tx.Run(query, queryMap)
 		if err != nil {
 			fmt.Println("Error on transaction run")
@@ -557,27 +665,13 @@ func GetFoldersIn(folderID *int) (*[]Folder, error) {
 	return result.(*[]Folder), nil
 }
 
-func CreateFile(fileName string, filePath string, folderParentID *int) (*int, error) {
-	var query string
-	var queryMap map[string]interface{}
-	if folderParentID == nil {
-		query, queryMap = createNewFileWithoutParentQuery(fileName, filePath)
-	} else {
-		query, queryMap = createNewFileWithParentQuery(fileName, filePath, *folderParentID)
-	}
+func CreateFile(fileName string, filePath string, folderParentID int) (*int, error) {
+	query, queryMap := createNewFileWithParentQuery(fileName, filePath, folderParentID)
 	return executeCreateQuery(getDriver())(query, queryMap)
 }
 
-func CreateFolder(folderName string, folderParentID *int) (*int, error) {
-	var query string
-	var queryMap map[string]interface{}
-	if folderParentID == nil {
-		fmt.Println("createNewFolderWithoutParentQuery")
-		query, queryMap = createNewFolderWithoutParentQuery(folderName)
-	} else {
-		fmt.Println("createNewFolderWithParentQuery", *folderParentID)
-		query, queryMap = createNewFolderWithParentQuery(folderName, *folderParentID)
-	}
+func CreateFolder(folderName string, folderParentID int) (*int, error) {
+	query, queryMap := createNewFolderWithParentQuery(folderName, folderParentID)
 	return executeCreateQuery(getDriver())(query, queryMap)
 }
 
@@ -652,26 +746,13 @@ func UpdateFile(fileID int, fileName string) error {
 	return executeUpdateQuery(getDriver())(query, queryMap)
 }
 
-func MoveFolder(folderID int, destFolderID *int) error {
-	var query string
-	var queryMap map[string]interface{}
-	if destFolderID == nil {
-		query, queryMap = moveFolderToRootFolderQuery(folderID)
-	} else {
-		fmt.Println("Building quieries to move folder")
-		query, queryMap = moveFolderQuery(folderID, *destFolderID)
-	}
+func MoveFolder(folderID int, destFolderID int) error {
+	query, queryMap := moveFolderQuery(folderID, destFolderID)
 	return executeUpdateQuery(getDriver())(query, queryMap)
 }
 
-func MoveFile(fileID int, destFolderID *int) error {
-	var query string
-	var queryMap map[string]interface{}
-	if destFolderID == nil {
-		query, queryMap = moveFileToRootFolderQuery(fileID)
-	} else {
-		query, queryMap = moveFileQuery(fileID, *destFolderID)
-	}
+func MoveFile(fileID int, destFolderID int) error {
+	query, queryMap := moveFileQuery(fileID, destFolderID)
 	return executeUpdateQuery(getDriver())(query, queryMap)
 }
 
