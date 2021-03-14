@@ -1,6 +1,4 @@
-package fsmanager
-
-// TODO move in a fsrepository package
+package fsrepository
 
 // TODO use env vars to configure username/password/host/port
 
@@ -11,6 +9,7 @@ package fsmanager
 import (
 	"errors"
 
+	"github.com/loisfa/remote-file-system/api/fsmodel"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j/dbtype"
 )
@@ -45,31 +44,31 @@ func getDriver() neo4j.Driver {
 	return *driver
 }
 
-func DBUpdateFolder(folderID int, folderName string) error {
+func UpdateFolder(folderID int, folderName string) error {
 	query, queryMap := updateFolderQuery(folderID, folderName)
 	return executeUpdateQuery(getDriver())(query, queryMap)
 }
-func DBMoveFolder(folderID int, destFolderID int) error {
+func MoveFolder(folderID int, destFolderID int) error {
 	query, queryMap := moveFolderQuery(folderID, destFolderID)
 	return executeUpdateQuery(getDriver())(query, queryMap)
 }
 
-func DBMoveFile(fileID int, destFolderID int) error {
+func MoveFile(fileID int, destFolderID int) error {
 	query, queryMap := moveFileQuery(fileID, destFolderID)
 	return executeUpdateQuery(getDriver())(query, queryMap)
 }
 
-func DBDeleteFolderAndContent(folderID int) error {
+func DeleteFolderAndContent(folderID int) error {
 	query, queryMap := deleteFolderAndContentQuery(folderID)
 	return executeUpdateQuery(getDriver())(query, queryMap)
 }
 
-func DBDeleteFile(folderID int) error {
+func DeleteFile(folderID int) error {
 	query, queryMap := deleteFileQuery(folderID)
 	return executeUpdateQuery(getDriver())(query, queryMap)
 }
 
-func DBGetFile(fileID int) (*File, error) {
+func GetFile(fileID int) (*fsmodel.File, error) {
 	session := getDriver().NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
@@ -86,10 +85,10 @@ func DBGetFile(fileID int) (*File, error) {
 		return nil, err
 	}
 
-	return result.(*File), nil
+	return result.(*fsmodel.File), nil
 }
 
-func DBExistsFile(fileID int) (*bool, error) {
+func ExistsFile(fileID int) (*bool, error) {
 	session := getDriver().NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
@@ -109,7 +108,7 @@ func DBExistsFile(fileID int) (*bool, error) {
 	return result.(*bool), nil
 }
 
-func DBGetFilesIn(folderID int) (*[]File, error) {
+func GetFilesIn(folderID int) (*[]fsmodel.File, error) {
 	session := getDriver().NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
@@ -126,10 +125,10 @@ func DBGetFilesIn(folderID int) (*[]File, error) {
 		return nil, err
 	}
 
-	return result.(*[]File), nil
+	return result.(*[]fsmodel.File), nil
 }
 
-func DBGetFolder(folderID int) (*Folder, error) {
+func GetFolder(folderID int) (*fsmodel.Folder, error) {
 	session := getDriver().NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
@@ -146,10 +145,10 @@ func DBGetFolder(folderID int) (*Folder, error) {
 		return nil, err
 	}
 
-	return result.(*Folder), nil
+	return result.(*fsmodel.Folder), nil
 }
 
-func DBGetRootFolderID() (*int, error) {
+func GetRootFolderID() (*int, error) {
 	session := getDriver().NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
@@ -169,7 +168,7 @@ func DBGetRootFolderID() (*int, error) {
 	return result.(*int), nil
 }
 
-func DBIsRootFolder(folderID int) (*bool, error) {
+func IsRootFolder(folderID int) (*bool, error) {
 	session := getDriver().NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
@@ -189,7 +188,7 @@ func DBIsRootFolder(folderID int) (*bool, error) {
 	return result.(*bool), nil
 }
 
-func DBExistsFolder(folderID int) (*bool, error) {
+func ExistsFolder(folderID int) (*bool, error) {
 	session := getDriver().NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
@@ -209,7 +208,7 @@ func DBExistsFolder(folderID int) (*bool, error) {
 	return result.(*bool), nil
 }
 
-func DBGetFoldersIn(folderID int) (*[]Folder, error) {
+func GetFoldersIn(folderID int) (*[]fsmodel.Folder, error) {
 	session := getDriver().NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
@@ -226,15 +225,15 @@ func DBGetFoldersIn(folderID int) (*[]Folder, error) {
 		return nil, err
 	}
 
-	return result.(*[]Folder), nil
+	return result.(*[]fsmodel.Folder), nil
 }
 
-func DBCreateFile(fileName string, filePath string, folderParentID int) (*int, error) {
+func CreateFile(fileName string, filePath string, folderParentID int) (*int, error) {
 	query, queryMap := createNewFileWithParentQuery(fileName, filePath, folderParentID)
 	return executeCreateQuery(getDriver())(query, queryMap)
 }
 
-func DBCreateFolder(folderName string, folderParentID int) (*int, error) {
+func CreateFolder(folderName string, folderParentID int) (*int, error) {
 	query, queryMap := createNewFolderWithParentQuery(folderName, folderParentID)
 	return executeCreateQuery(getDriver())(query, queryMap)
 }
@@ -327,13 +326,13 @@ func executeUpdateQuery(driver neo4j.Driver) func(string, map[string]interface{}
 	}
 }
 
-func getFileByIDQuery(fileID int) (string, map[string]interface{}, func(result neo4j.Result) (*File, error)) {
+func getFileByIDQuery(fileID int) (string, map[string]interface{}, func(result neo4j.Result) (*fsmodel.File, error)) {
 	return `MATCH (file:File{id: $fileID})
 		RETURN file`,
 		map[string]interface{}{
 			"fileID": fileID,
 		},
-		func(result neo4j.Result) (*File, error) {
+		func(result neo4j.Result) (*fsmodel.File, error) {
 			record, err := result.Single()
 			if err != nil {
 				return nil, err
@@ -365,13 +364,13 @@ func existsFileByIDQuery(fileID int) (string, map[string]interface{}, func(resul
 		}
 }
 
-func getFolderByIDQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*Folder, error)) {
+func getFolderByIDQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*fsmodel.Folder, error)) {
 	return `MATCH (folder:Folder{id: $folderID})
 		RETURN folder`,
 		map[string]interface{}{
 			"folderID": folderID,
 		},
-		func(result neo4j.Result) (*Folder, error) {
+		func(result neo4j.Result) (*fsmodel.Folder, error) {
 			record, err := result.Single()
 			if err != nil {
 				return nil, err
@@ -449,7 +448,7 @@ func existsFolderByIDQuery(folderID int) (string, map[string]interface{}, func(r
 		}
 }
 
-func getFilesInFolderQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*[]File, error)) {
+func getFilesInFolderQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*[]fsmodel.File, error)) {
 	return `MATCH (parentFolder:Folder{id: $folderID})
 	MATCH (file:File)-[:IS_INSIDE]->(parentFolder)
 	RETURN file`,
@@ -458,7 +457,7 @@ func getFilesInFolderQuery(folderID int) (string, map[string]interface{}, func(r
 		}, mapResultToFiles
 }
 
-func getFoldersInFolderQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*[]Folder, error)) {
+func getFoldersInFolderQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*[]fsmodel.Folder, error)) {
 	return `MATCH (parentFolder:Folder{id: $folderID})
 	MATCH (folder:Folder)-[:IS_INSIDE]->(parentFolder)
 	RETURN folder`,
@@ -549,7 +548,7 @@ func deleteFileQuery(fileID int) (string, map[string]interface{}) {
 		}
 }
 
-func mapRecordToFile(record *neo4j.Record) (*File, error) {
+func mapRecordToFile(record *neo4j.Record) (*fsmodel.File, error) {
 	file, found := record.Get(dbFile)
 	if !found {
 		return nil, errors.New("Could not find 'file' inside the File record")
@@ -569,15 +568,15 @@ func mapRecordToFile(record *neo4j.Record) (*File, error) {
 		return nil, errors.New("Could not retrieve 'name' of the file result")
 	}
 
-	return &File{
+	return &fsmodel.File{
 		Id:   int(id.(int64)),
 		Name: name.(string),
 		Path: path.(string),
 	}, nil
 }
 
-func mapResultToFiles(result neo4j.Result) (*[]File, error) {
-	var files []File
+func mapResultToFiles(result neo4j.Result) (*[]fsmodel.File, error) {
+	var files []fsmodel.File
 	for result.Next() == true {
 		record := result.Record()
 
@@ -591,7 +590,7 @@ func mapResultToFiles(result neo4j.Result) (*[]File, error) {
 	return &files, nil
 }
 
-func mapRecordToFolder(record *neo4j.Record) (*Folder, error) {
+func mapRecordToFolder(record *neo4j.Record) (*fsmodel.Folder, error) {
 	folder, found := record.Get(dbFolder)
 	if !found {
 		return nil, errors.New("Could not find 'file' inside the Folder record")
@@ -607,7 +606,7 @@ func mapRecordToFolder(record *neo4j.Record) (*Folder, error) {
 		return nil, errors.New("Could not retrieve 'name' of the Folder record")
 	}
 
-	return &Folder{
+	return &fsmodel.Folder{
 		Id:   int(id.(int64)),
 		Name: name.(string),
 	}, nil
@@ -622,8 +621,8 @@ func mapRecordToFolderID(record *neo4j.Record) (*int, error) {
 	return &folder.Id, nil
 }
 
-func mapResultToFolders(result neo4j.Result) (*[]Folder, error) {
-	var folders []Folder
+func mapResultToFolders(result neo4j.Result) (*[]fsmodel.Folder, error) {
+	var folders []fsmodel.Folder
 
 	for result.Next() == true {
 		record := result.Record()

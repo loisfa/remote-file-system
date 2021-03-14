@@ -4,6 +4,8 @@ go 1.15
 
 // can be needed on windows if do path not properly defined
 // replace github.com/loisfa/remote-file-system/api => c:/Users/{user}/go/src/github.com/loisfa/remote-file-system/api
+replace github.com/loisfa/remote-file-system/api => ./
+replace github.com/loisfa/remote-file-system => ./../
 
 require (
 	github.com/gorilla/handlers v1.5.1

@@ -1,15 +1,15 @@
-package fsmanager
+package fsservice
 
 import (
-	"testing"
 	"runtime/debug"
+	"testing"
 )
 
 func TestDbInit(t *testing.T) {
-    folderIdToFolderMap := GetDbFolderMap()
+	folderIdToFolderMap := GetDbFolderMap()
 
 	if folderIdToFolderMap == nil {
-        t.Errorf("folderIdToFolderMap is nil")
+		t.Errorf("folderIdToFolderMap is nil")
 	}
 
 	var rootFolder = folderIdToFolderMap[0]
@@ -17,13 +17,13 @@ func TestDbInit(t *testing.T) {
 	var summerPhotosFolder = folderIdToFolderMap[2]
 
 	if rootFolder != nil {
-        t.Errorf("folderIdToFolderMap is not nil before db init")
+		t.Errorf("folderIdToFolderMap is not nil before db init")
 	}
 	if photosFolder != nil {
-        t.Errorf("photosFolder is not nil before db init")
+		t.Errorf("photosFolder is not nil before db init")
 	}
 	if summerPhotosFolder != nil {
-        t.Errorf("summerPhotosFolder is not nil before db init")
+		t.Errorf("summerPhotosFolder is not nil before db init")
 	}
 
 	InitDB()
@@ -32,13 +32,13 @@ func TestDbInit(t *testing.T) {
 	photosFolder = folderIdToFolderMap[1]
 	summerPhotosFolder = folderIdToFolderMap[2]
 	if rootFolder == nil {
-        t.Errorf("folderIdToFolderMap is nil after db init")
+		t.Errorf("folderIdToFolderMap is nil after db init")
 	}
 	if photosFolder == nil {
-        t.Errorf("photosFolder is nil after db init")
+		t.Errorf("photosFolder is nil after db init")
 	}
 	if summerPhotosFolder == nil {
-        t.Errorf("summerPhotosFolder is nil after db init")
+		t.Errorf("summerPhotosFolder is nil after db init")
 	}
 }
 
@@ -94,7 +94,6 @@ func TestDbMoveFolder(t *testing.T) {
 	assertEqual(t, *createdFolder.ParentId, targetFolder.Id)
 }
 
-
 func TestDbDeleteFolderAndContent(t *testing.T) {
 	InitDB()
 
@@ -144,7 +143,6 @@ func TestDbDeleteFile(t *testing.T) {
 
 	assertNil(t, fileIdToFileMap[newFileId])
 }
-
 
 func TestDbMoveFile(t *testing.T) {
 	InitDB()

@@ -11,9 +11,11 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 
-	"github.com/loisfa/remote-file-system/api/fsmanager"
+	"github.com/loisfa/remote-file-system/api/fsmodel"
+	"github.com/loisfa/remote-file-system/api/fsservice"
 )
 
+// https://itnext.io/golang-error-handling-best-practice-a36f47b0b94c
 // TODO: do not expose the database errors, to be rewritten with message
 
 func main() {
@@ -83,17 +85,17 @@ type ApiFolderContent struct {
 }
 
 func getContentIn(folderId int) (*ApiFolderContent, error) {
-	currentFolder, err := fsmanager.GetFolder(folderId)
+	currentFolder, err := fsservice.GetFolder(folderId)
 	if err != nil {
 		return nil, err
 	}
 
-	subFolders, err := fsmanager.GetFoldersIn(folderId)
+	subFolders, err := fsservice.GetFoldersIn(folderId)
 	if err != nil {
 		return nil, err
 	}
 
-	files, err := fsmanager.GetFilesIn(folderId)
+	files, err := fsservice.GetFilesIn(folderId)
 	if err != nil {
 		return nil, err
 	}
@@ -118,14 +120,14 @@ func getContentIn(folderId int) (*ApiFolderContent, error) {
 	return &ApiFolderContent{apiCurrentFolder, apiFolders, apiFiles}, nil
 }
 
-func mapFolderToApiFolder(folder fsmanager.Folder) ApiFolder {
+func mapFolderToApiFolder(folder fsmodel.Folder) ApiFolder {
 	return ApiFolder{
 		folder.Id,
 		folder.Name,
 		&folder.Id}
 }
 
-func mapFileToApiFile(file fsmanager.File) ApiFile {
+func mapFileToApiFile(file fsmodel.File) ApiFile {
 	return ApiFile{
 		file.Id,
 		file.Name}
@@ -142,7 +144,7 @@ func serveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := fsmanager.GetFile(fileId)
+	file, err := fsservice.GetFile(fileId)
 	if file == nil {
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
@@ -163,7 +165,7 @@ func getFolderContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	found, err := fsmanager.ExistsFolder(folderId)
+	found, err := fsservice.ExistsFolder(folderId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -188,7 +190,7 @@ func getFolderContent(w http.ResponseWriter, r *http.Request) {
 }
 
 func getRootFolderContent(w http.ResponseWriter, r *http.Request) {
-	id, err := fsmanager.GetRootFolderID()
+	id, err := fsservice.GetRootFolderID()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -219,12 +221,12 @@ func createFolder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Create folder: missing destination folder id", http.StatusBadRequest)
 		return
 	}
-	if exists, err := fsmanager.ExistsFolder(*destFolderId); err != nil || exists == nil || !*exists {
+	if exists, err := fsservice.ExistsFolder(*destFolderId); err != nil || exists == nil || !*exists {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	id, err := fsmanager.CreateFolder(folder.Name, *destFolderId)
+	id, err := fsservice.CreateFolder(folder.Name, *destFolderId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -254,7 +256,7 @@ func updateFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = fsmanager.UpdateFolder(*id, f.Name)
+	err = fsservice.UpdateFolder(*id, f.Name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -276,7 +278,7 @@ func deleteFolderAndContent(w http.ResponseWriter, r *http.Request) {
 	}
 	id = &idInt
 
-	err = fsmanager.DeleteFolderAndContent(*id)
+	err = fsservice.DeleteFolderAndContent(*id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -303,7 +305,7 @@ func moveFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = fsmanager.MoveFolder(folderId, destFolderIdInt)
+	err = fsservice.MoveFolder(folderId, destFolderIdInt)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -325,7 +327,7 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	id = &idInt
 
-	err = fsmanager.DeleteFile(*id)
+	err = fsservice.DeleteFile(*id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -352,7 +354,7 @@ func moveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = fsmanager.MoveFile(fileId, destFolderIdInt)
+	err = fsservice.MoveFile(fileId, destFolderIdInt)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -374,6 +376,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		destFolderId = id
 	}
 
+	// TODO externalize this part of the code
 	// 10 << 20 specifies a maximum upload of 10 MB files.
 	r.ParseMultipartForm(10 << 20)
 	file, handler, err := r.FormFile("file")
@@ -400,7 +403,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 
 	tempFile.Write(fileBytes)
 
-	fileId, err := fsmanager.CreateFile(handler.Filename, tempFile.Name(), destFolderId)
+	fileId, err := fsservice.CreateFile(handler.Filename, tempFile.Name(), destFolderId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
