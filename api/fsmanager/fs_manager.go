@@ -2,19 +2,14 @@ package fsmanager
 
 import (
 	"errors"
-	"fmt"
 )
 
-// TODO rename all the DBGet... --> Get... (remove "DB" prefix)
-func DBGetRootFolderID() (id *int, err error) {
-	return GetRootFolderID()
+func GetRootFolderID() (id *int, err error) {
+	return DBGetRootFolderID()
 }
 
-// TODO rename all the DBGet... --> Get... (remove "DB" prefix)
-func DBGetFolder(folderID int) (*Folder, error) {
-	fmt.Println("DBGetFolder: Getting folder in %d", folderID)
-	exists, err := ExistsFolder(folderID)
-	fmt.Println("DBGetFolder: exists: ", exists, "-- err: ", err)
+func GetFolder(folderID int) (*Folder, error) {
+	exists, err := DBExistsFolder(folderID)
 	if err != nil {
 		return nil, err
 	}
@@ -22,19 +17,23 @@ func DBGetFolder(folderID int) (*Folder, error) {
 		return nil, nil
 	}
 
-	folder, err := GetFolder(folderID)
+	folder, err := DBGetFolder(folderID)
 	if err != nil {
 		return nil, err
 	}
 	return folder, err
 }
 
-func DBExistsFolder(folderID int) (*bool, error) {
-	return ExistsFolder(folderID)
+func ExistsFolder(folderID int) (*bool, error) {
+	return DBExistsFolder(folderID)
 }
 
-func DBGetFile(fileID int) (*File, error) {
-	file, err := GetFile(fileID)
+func GetFile(fileID int) (*File, error) {
+	if exists, err := DBExistsFile(fileID); err != nil || exists == nil || *exists == false {
+		return nil, errors.New("The file does not exist. Cannot be fetched")
+	}
+
+	file, err := DBGetFile(fileID)
 	if err != nil {
 		return nil, err
 	}
@@ -46,66 +45,65 @@ func DBGetFile(fileID int) (*File, error) {
 	return file, err
 }
 
-// TODO could have one single database call to return currentFolder, folders, files
-func DBGetFoldersIn(folderID int) (*[]Folder, error) {
-	return GetFoldersIn(folderID)
+// TODO could have one single database call to return at the same time: currentFolder, folders, files
+func GetFoldersIn(folderID int) (*[]Folder, error) {
+	return DBGetFoldersIn(folderID)
 }
 
-func DBGetFilesIn(folderID int) (*[]File, error) {
-	return GetFilesIn(folderID)
+func GetFilesIn(folderID int) (*[]File, error) {
+	return DBGetFilesIn(folderID)
 }
 
-func DBCreateFolder(name string, parentID int) (*int, error) {
-	return CreateFolder(name, parentID)
+func CreateFolder(name string, parentID int) (*int, error) {
+	return DBCreateFolder(name, parentID)
 }
 
-func DBCreateFile(name string, path string, parentID int) (*int, error) {
-	return CreateFile(name, path, parentID)
+func CreateFile(name string, path string, parentID int) (*int, error) {
+	return DBCreateFile(name, path, parentID)
 }
 
-func DBUpdateFolder(folderID int, name string) error {
-	return UpdateFolder(folderID, name)
+func UpdateFolder(folderID int, name string) error {
+	return DBUpdateFolder(folderID, name)
 }
 
-func DBMoveFolder(folderID int, destFolderID int) error {
-	if found, err := ExistsFolder(destFolderID); err != nil || found != nil && *found == false {
+func MoveFolder(folderID int, destFolderID int) error {
+	if found, err := DBExistsFolder(destFolderID); err != nil || found == nil || *found == false {
 		return errors.New("The destination folder does not exist. Folder cannot be moved there.")
 	}
 
-	if found, err := ExistsFolder(folderID); err != nil || found != nil && *found == false {
+	if found, err := DBExistsFolder(folderID); err != nil || found == nil || *found == false {
 		return errors.New("The folder was not found.")
 	}
 
-	fmt.Println("DBMoveFolder about to check")
-	if isRoot, err := IsRootFolder(folderID); err != nil || isRoot != nil && *isRoot == true {
+	if isRoot, err := DBIsRootFolder(folderID); err != nil || isRoot == nil || *isRoot == true {
 		return errors.New("Cannot perform 'Move' operation on the root folder")
 	}
 
-	return MoveFolder(folderID, destFolderID)
+	return DBMoveFolder(folderID, destFolderID)
 }
 
-func DBMoveFile(fileID int, destFolderID int) error {
-	if found, err := ExistsFolder(destFolderID); err != nil || found != nil && *found == false {
+func MoveFile(fileID int, destFolderID int) error {
+	if found, err := DBExistsFolder(destFolderID); err != nil || found == nil || *found == false {
 		return errors.New("The destination folder does not exist. File cannot be moved there.")
 	}
-	return MoveFile(fileID, destFolderID)
+	return DBMoveFile(fileID, destFolderID)
 }
 
-func DBDeleteFolderAndContent(folderID int) error {
-	if found, err := ExistsFolder(folderID); err != nil || found != nil && *found == false {
+func DeleteFolderAndContent(folderID int) error {
+	if found, err := DBExistsFolder(folderID); err != nil || found == nil || *found == false {
 		return errors.New("The folder does not exist. It cannot be deleted.")
 	}
 
-	if isRoot, err := IsRootFolder(folderID); err != nil || isRoot != nil && *isRoot == true {
+	if isRoot, err := DBIsRootFolder(folderID); err != nil || isRoot == nil || *isRoot == true {
 		return errors.New("Trying to delete the root folder. Operation not permitted")
 	}
 
-	return DeleteFolderContent(folderID)
+	return DBDeleteFolderAndContent(folderID)
 }
 
-func DBDeleteFile(fileID int) error {
-	if found, err := ExistsFile(fileID); err != nil || found != nil && *found == false {
+func DeleteFile(fileID int) error {
+	if found, err := DBExistsFile(fileID); err != nil || found == nil || *found == false {
 		return errors.New("The file does not exist. It cannot be deleted.")
 	}
-	return DeleteFile(fileID)
+	return DBDeleteFile(fileID)
 }

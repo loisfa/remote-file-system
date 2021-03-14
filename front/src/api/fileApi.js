@@ -33,7 +33,7 @@ export const apiUploadFile = (jsFile, destFolderId) => {
   return new Promise(resolve => {
     const dest = destFolderId || 0;
     const data = new FormData();
-    data.append('upload', jsFile, jsFile.fileName);
+    data.append('file', jsFile, jsFile.fileName);
     axios({
       method: "POST",
       data,

@@ -147,7 +147,7 @@ file1.close()
 ### UPLOAD A FILE IN ROOT FOLDER
 response = session.post(
     ROOT_URL + "/UploadFile?dest=" + str(root_folder_id), 
-    files = { 'upload': open(file1_path, 'rb') })
+    files = { 'file': open(file1_path, 'rb') })
 assert response.status_code == 201, "Wrong http code received on create file in root folder: " + str(response.status_code)
 body = json.loads(response.text)
 uploaded_file1_id = body
@@ -241,14 +241,14 @@ assert response.status_code == 201, "Wrong http code received on create /folder1
 # Add fileA.txt in /folder1
 response = session.post(
     ROOT_URL + "/UploadFile?dest=" + str(created_folder1_id), 
-    files = { 'upload': open(file1_path, 'rb') })
+    files = { 'file': open(file1_path, 'rb') })
 assert response.status_code == 201, "Wrong http code received on create file in /folder1: " + str(response.status_code)
 body = json.loads(response.text)
 uploaded_fileA_id = body
 # Add fileB.txt in /folder1/folder1.2
 response = session.post(
     ROOT_URL + "/UploadFile?dest=" + str(created_folder2_id), 
-    files = { 'upload': open(file1_path, 'rb') })
+    files = { 'file': open(file1_path, 'rb') })
 assert response.status_code == 201, "Wrong http code received on create file in /folder1: " + str(response.status_code)
 body = json.loads(response.text)
 uploaded_fileB_id = body

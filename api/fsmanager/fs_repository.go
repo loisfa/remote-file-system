@@ -2,32 +2,23 @@ package fsmanager
 
 // TODO move in a fsrepository package
 
-import (
-	"errors"
-	"fmt"
-
-	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
-	"github.com/neo4j/neo4j-go-driver/v4/neo4j/dbtype"
-)
+// TODO use env vars to configure username/password/host/port
 
 // TODO gracefully shutdown the go application:
 // https://medium.com/@BastianRob/gracefully-shutdown-your-go-application-2ef2871025f0
 // defer driver.Close()
 
-// TODO beware database injection (string params)
+import (
+	"errors"
 
-// Item can be a folder or a file
-type createdItem struct {
-	Id int
-}
-
-// Do not use the driver directly, please use the getDriver method
-var driver *neo4j.Driver
+	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v4/neo4j/dbtype"
+)
 
 const (
-	uri      = "neo4j://localhost:7687" // TODO
-	username = "neo4j"                  // TODO not commit
-	password = "password"               // TODO not commit
+	uri      = "neo4j://localhost:7687"
+	username = "neo4j"
+	password = "password" // NB in theory should not commit
 
 	dbId     = "id"
 	dbName   = "name"
@@ -37,106 +28,306 @@ const (
 	dbExists = "exists"
 )
 
-func mapRecordToFile(record *neo4j.Record) (*File, error) {
-	fmt.Println("record: %+v", record)
-
-	file, _ := record.Get(dbFile)
-	fileProps := (file.(dbtype.Node)).Props
-	fmt.Printf("%+v\n", fileProps)
-
-	id, found := fileProps[dbId]
-	if !found {
-		return nil, errors.New("Could not retrieve file id from DB")
-	}
-	name, found := fileProps[dbName]
-	if !found {
-		return nil, errors.New("Could not retrieve file name from DB")
-	}
-	path, found := fileProps[dbPath]
-	if !found {
-		return nil, errors.New("Could not retrieve file path from DB")
-	}
-
-	fmt.Println("file name:", name)
-	fmt.Println("file path:", path)
-	fmt.Println("file id:", id)
-	return &File{
-		Id:   int(id.(int64)),
-		Name: name.(string),
-		Path: path.(string),
-	}, nil
+// Item can be a folder or a file
+type createdItem struct {
+	Id int
 }
 
-func mapResultToFiles(result neo4j.Result) (*[]File, error) {
-	var files []File
-	for result.Next() == true {
-		record := result.Record()
+// Do not use the driver directly, please use the getDriver method
+var driver *neo4j.Driver
 
-		file, err := mapRecordToFile(record)
+func getDriver() neo4j.Driver {
+	if driver == nil {
+		d := initDriver()
+		driver = &d
+	}
+
+	return *driver
+}
+
+func DBUpdateFolder(folderID int, folderName string) error {
+	query, queryMap := updateFolderQuery(folderID, folderName)
+	return executeUpdateQuery(getDriver())(query, queryMap)
+}
+func DBMoveFolder(folderID int, destFolderID int) error {
+	query, queryMap := moveFolderQuery(folderID, destFolderID)
+	return executeUpdateQuery(getDriver())(query, queryMap)
+}
+
+func DBMoveFile(fileID int, destFolderID int) error {
+	query, queryMap := moveFileQuery(fileID, destFolderID)
+	return executeUpdateQuery(getDriver())(query, queryMap)
+}
+
+func DBDeleteFolderAndContent(folderID int) error {
+	query, queryMap := deleteFolderAndContentQuery(folderID)
+	return executeUpdateQuery(getDriver())(query, queryMap)
+}
+
+func DBDeleteFile(folderID int) error {
+	query, queryMap := deleteFileQuery(folderID)
+	return executeUpdateQuery(getDriver())(query, queryMap)
+}
+
+func DBGetFile(fileID int) (*File, error) {
+	session := getDriver().NewSession(neo4j.SessionConfig{})
+	defer session.Close()
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		query, queryMap, mapResultToFileFn := getFileByIDQuery(fileID)
+		result, err := tx.Run(query, queryMap)
 		if err != nil {
 			return nil, err
 		}
+		return mapResultToFileFn(result)
+	})
 
-		files = append(files, *file)
-	}
-	return &files, nil
-}
-
-func mapRecordToFolder(record *neo4j.Record) (*Folder, error) {
-	fmt.Println("record: %+v", record)
-
-	folder, _ := record.Get(dbFolder)
-	folderProps := (folder.(dbtype.Node)).Props
-	fmt.Printf("%+v\n", folderProps)
-
-	id, found := folderProps[dbId]
-	if !found {
-		return nil, errors.New("Could not retrieve folder id from DB")
-	}
-	name, found := folderProps[dbName]
-	if !found {
-		return nil, errors.New("Could not retrieve folder name from DB")
-	}
-
-	fmt.Println("folder name:", name)
-	fmt.Println("folder id:", id)
-	return &Folder{
-		Id:   int(id.(int64)),
-		Name: name.(string),
-	}, nil
-}
-
-func mapRecordToFolderID(record *neo4j.Record) (*int, error) {
-	folder, err := mapRecordToFolder(record)
 	if err != nil {
 		return nil, err
 	}
 
-	return &folder.Id, nil
+	return result.(*File), nil
 }
 
-func mapResultToFolders(result neo4j.Result) (*[]Folder, error) {
-	var folders []Folder
-	fmt.Println("mapResultToFolders input result:")
-	fmt.Println(result)
-	for result.Next() == true {
-		fmt.Println("result.Next() == true")
-		record := result.Record()
-		fmt.Println("record %v", record)
+func DBExistsFile(fileID int) (*bool, error) {
+	session := getDriver().NewSession(neo4j.SessionConfig{})
+	defer session.Close()
 
-		folder, err := mapRecordToFolder(record)
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		query, queryMap, mapResultToExistFn := existsFileByIDQuery(fileID)
+		result, err := tx.Run(query, queryMap)
+		if err != nil {
+			return nil, err
+		}
+		return mapResultToExistFn(result)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result.(*bool), nil
+}
+
+func DBGetFilesIn(folderID int) (*[]File, error) {
+	session := getDriver().NewSession(neo4j.SessionConfig{})
+	defer session.Close()
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		query, queryMap, mapResultToFilesFn := getFilesInFolderQuery(folderID)
+		result, err := tx.Run(query, queryMap)
+		if err != nil {
+			return nil, err
+		}
+		return mapResultToFilesFn(result)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result.(*[]File), nil
+}
+
+func DBGetFolder(folderID int) (*Folder, error) {
+	session := getDriver().NewSession(neo4j.SessionConfig{})
+	defer session.Close()
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		query, queryMap, mapResultToFolderFn := getFolderByIDQuery(folderID)
+		result, err := tx.Run(query, queryMap)
+		if err != nil {
+			return nil, err
+		}
+		return mapResultToFolderFn(result)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result.(*Folder), nil
+}
+
+func DBGetRootFolderID() (*int, error) {
+	session := getDriver().NewSession(neo4j.SessionConfig{})
+	defer session.Close()
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		query, queryMap, mapResultToFolderIDFn := getRootFolderIDQuery()
+		result, err := tx.Run(query, queryMap)
+		if err != nil {
+			return nil, err
+		}
+		return mapResultToFolderIDFn(result)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result.(*int), nil
+}
+
+func DBIsRootFolder(folderID int) (*bool, error) {
+	session := getDriver().NewSession(neo4j.SessionConfig{})
+	defer session.Close()
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		query, queryMap, mapResultToIsRootFolderFn := isRootFolderQuery(folderID)
+		result, err := tx.Run(query, queryMap)
+		if err != nil {
+			return nil, err
+		}
+		return mapResultToIsRootFolderFn(result)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result.(*bool), nil
+}
+
+func DBExistsFolder(folderID int) (*bool, error) {
+	session := getDriver().NewSession(neo4j.SessionConfig{})
+	defer session.Close()
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		query, queryMap, mapResultToExistFn := existsFolderByIDQuery(folderID)
+		result, err := tx.Run(query, queryMap)
+		if err != nil {
+			return nil, err
+		}
+		return mapResultToExistFn(result)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result.(*bool), nil
+}
+
+func DBGetFoldersIn(folderID int) (*[]Folder, error) {
+	session := getDriver().NewSession(neo4j.SessionConfig{})
+	defer session.Close()
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		query, queryMap, mapResultToFoldersFn := getFoldersInFolderQuery(folderID)
+		result, err := tx.Run(query, queryMap)
+		if err != nil {
+			return nil, err
+		}
+		return mapResultToFoldersFn(result)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result.(*[]Folder), nil
+}
+
+func DBCreateFile(fileName string, filePath string, folderParentID int) (*int, error) {
+	query, queryMap := createNewFileWithParentQuery(fileName, filePath, folderParentID)
+	return executeCreateQuery(getDriver())(query, queryMap)
+}
+
+func DBCreateFolder(folderName string, folderParentID int) (*int, error) {
+	query, queryMap := createNewFolderWithParentQuery(folderName, folderParentID)
+	return executeCreateQuery(getDriver())(query, queryMap)
+}
+
+// InitDriver returns a valid driver
+// handles driver lifetime based on your application lifetime requirements  driver's lifetime is usually
+// bound by the application lifetime, which usually implies one driver instance per application
+func initDriver() neo4j.Driver {
+	// Neo4j 4.0, defaults to no TLS therefore use bolt:// or neo4j://
+	// Neo4j 3.5, defaults to self-signed certificates, TLS on, therefore use bolt+ssc:// or neo4j+ssc://
+	driver, err := neo4j.NewDriver(uri, neo4j.BasicAuth(username, password, ""))
+	if err != nil {
+		panic(err)
+	}
+
+	err = driver.VerifyConnectivity()
+	if err != nil {
+		panic(err)
+	}
+
+	return driver
+}
+
+func executeCreateQuery(driver neo4j.Driver) func(string, map[string]interface{}) (*int, error) {
+	return func(query string, queryMap map[string]interface{}) (*int, error) {
+		// Sessions are short-lived, cheap to create and NOT thread safe. Typically create one or more sessions
+		// per request in your web application. Make sure to call Close on the session when done.
+		// For multi-database support, set sessionConfig.DatabaseName to requested database
+		// Session config will default to write mode, if only reads are to be used configure session for
+		// read mode.
+		session := getDriver().NewSession(neo4j.SessionConfig{})
+		defer session.Close()
+
+		result, err := session.WriteTransaction(createItem(query, queryMap))
 		if err != nil {
 			return nil, err
 		}
 
-		folders = append(folders, *folder)
-		fmt.Println("folders %v", folders)
+		item := result.(*createdItem)
+		return &item.Id, nil
 	}
-	fmt.Println("about to return folders: %v", folders)
-	return &folders, nil
 }
 
-func getFileByID(fileID int) (string, map[string]interface{}, func(result neo4j.Result) (*File, error)) {
+func createItem(query string, queryMap map[string]interface{}) func(tx neo4j.Transaction) (interface{}, error) {
+	return func(tx neo4j.Transaction) (interface{}, error) {
+		result, err := tx.Run(query, queryMap)
+		// In face of driver native errors, make sure to return them directly.
+		// Depending on the error, the driver may try to execute the function again.
+		if err != nil {
+			return nil, err
+		}
+
+		record, err := result.Single()
+		if err != nil {
+			return nil, err
+		}
+
+		// You can also retrieve values by name, with e.g. `id, found := record.Get("n.id")`
+		return &createdItem{
+			Id: int(record.Values[0].(int64)),
+		}, nil
+	}
+}
+
+func updateItem(query string, queryMap map[string]interface{}) func(tx neo4j.Transaction) (interface{}, error) {
+	return func(tx neo4j.Transaction) (interface{}, error) {
+		_, err := tx.Run(query, queryMap)
+		// In face of driver native errors, make sure to return them directly.
+		// Depending on the error, the driver may try to execute the function again.
+		if err != nil {
+			return nil, err
+		}
+
+		return nil, nil
+	}
+}
+
+func executeUpdateQuery(driver neo4j.Driver) func(string, map[string]interface{}) error {
+	return func(query string, queryMap map[string]interface{}) error {
+		// Sessions are short-lived, cheap to create and NOT thread safe. Typically create one or more sessions
+		// per request in your web application. Make sure to call Close on the session when done.
+		// For multi-database support, set sessionConfig.DatabaseName to requested database
+		// Session config will default to write mode, if only reads are to be used configure session for
+		// read mode.
+		session := getDriver().NewSession(neo4j.SessionConfig{})
+		defer session.Close()
+
+		_, err := session.WriteTransaction(updateItem(query, queryMap))
+		return err
+	}
+}
+
+func getFileByIDQuery(fileID int) (string, map[string]interface{}, func(result neo4j.Result) (*File, error)) {
 	return `MATCH (file:File{id: $fileID})
 		RETURN file`,
 		map[string]interface{}{
@@ -152,7 +343,7 @@ func getFileByID(fileID int) (string, map[string]interface{}, func(result neo4j.
 		}
 }
 
-func existsFileByID(fileID int) (string, map[string]interface{}, func(result neo4j.Result) (*bool, error)) {
+func existsFileByIDQuery(fileID int) (string, map[string]interface{}, func(result neo4j.Result) (*bool, error)) {
 	return `OPTIONAL MATCH (file:File{id: $fileID})
 		RETURN file IS NOT NULL AS exists`,
 		map[string]interface{}{
@@ -174,7 +365,7 @@ func existsFileByID(fileID int) (string, map[string]interface{}, func(result neo
 		}
 }
 
-func getFolderByID(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*Folder, error)) {
+func getFolderByIDQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*Folder, error)) {
 	return `MATCH (folder:Folder{id: $folderID})
 		RETURN folder`,
 		map[string]interface{}{
@@ -190,7 +381,8 @@ func getFolderByID(folderID int) (string, map[string]interface{}, func(result ne
 		}
 }
 
-// Use this method only in required case since it increments the folder_id_sequence even if no root folder to create
+// createRootFolderIfNotExistsQuery:
+// use only if required since it increments the folder_id_sequence even if no root folder to create
 func createRootFolderIfNotExistsQuery() (string, map[string]interface{}) {
 	return `MATCH (seq:Sequence {key:'folder_id_sequence'})
 		CALL apoc.atomic.add(seq, 'value', 1, 5)
@@ -214,15 +406,12 @@ func getRootFolderIDQuery() (string, map[string]interface{}, func(result neo4j.R
 			if err != nil {
 				return nil, err
 			}
-
-			folder, _ := record.Get(dbFolder)
-			fmt.Println("getRootFolderIDQuery - folder:")
-			fmt.Println(folder)
 			return mapRecordToFolderID(record)
 		}
 }
 
-// Suppose you already have checked the folder exists
+// isRootFolderQuery:
+// It assumes you already have checked whether the folder exists or not
 func isRootFolderQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*bool, error)) {
 	return `MATCH (folder:Folder {id: $folderID})
 		RETURN exists(folder.is_root) and folder.is_root = true`,
@@ -233,25 +422,19 @@ func isRootFolderQuery(folderID int) (string, map[string]interface{}, func(resul
 			if err != nil {
 				return nil, err
 			}
-
-			fmt.Println("isRootFolderQuery - record:")
-			fmt.Printf("%+v\n", record)
 			isRoot := record.Values[0].(bool)
-			fmt.Printf("%+v\n", isRoot)
 			return &isRoot, nil
 		}
 }
 
-func existsFolderByID(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*bool, error)) {
+func existsFolderByIDQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*bool, error)) {
 	return `OPTIONAL MATCH (folder:Folder{id: $folderID})
 		RETURN folder IS NOT NULL AS exists`,
 		map[string]interface{}{
 			"folderID": folderID,
 		},
 		func(result neo4j.Result) (*bool, error) {
-			fmt.Println("existsFolderByID fn: result:", result)
 			record, err := result.Single()
-			fmt.Println("existsFolderByID fn: record:", record)
 			if err != nil {
 				return nil, err
 			}
@@ -265,22 +448,6 @@ func existsFolderByID(folderID int) (string, map[string]interface{}, func(result
 			return &e, nil
 		}
 }
-
-/*
-func getRootFilesQuery() (string, map[string]interface{}, func(result neo4j.Result) (*[]File, error)) {
-	return `MATCH (file:File)
-		WHERE NOT (file)-[:IS_INSIDE]->(:Folder)
-		RETURN file`, make(map[string]interface{}), mapResultToFiles
-}
-*/
-
-/*
-func getRootFoldersQuery() (string, map[string]interface{}, func(result neo4j.Result) (*[]Folder, error)) {
-	return `MATCH (folder:Folder)
-		WHERE NOT (folder)-[:IS_INSIDE]->(:Folder)
-		RETURN folder`, make(map[string]interface{}), mapResultToFolders
-}
-*/
 
 func getFilesInFolderQuery(folderID int) (string, map[string]interface{}, func(result neo4j.Result) (*[]File, error)) {
 	return `MATCH (parentFolder:Folder{id: $folderID})
@@ -316,20 +483,6 @@ func createNewFileWithParentQuery(fileName string, filePath string, parentFolder
 		}
 }
 
-/*
-func createNewFileWithoutParentQuery(fileName string, filePath string) (string, map[string]interface{}) {
-	return `MATCH (seq:Sequence {key:'file_id_sequence'})
-	CALL apoc.atomic.add(seq, 'value', 1, 5)
-	YIELD newValue as file_id
-	CREATE (file:File { id: file_id, name: $fileName, path: $filePath})
-	RETURN file.id AS fileID`,
-		map[string]interface{}{
-			"fileName": fileName,
-			"filePath": filePath,
-		}
-}
-*/
-
 func createNewFolderWithParentQuery(folderName string, parentFolderID int) (string, map[string]interface{}) {
 	return `MATCH (parentFolder:Folder{id: $parentFolderID})
 	MATCH (seq:Sequence {key:'folder_id_sequence'})
@@ -344,19 +497,6 @@ func createNewFolderWithParentQuery(folderName string, parentFolderID int) (stri
 		}
 }
 
-/*
-func createNewFolderWithoutParentQuery(folderName string) (string, map[string]interface{}) {
-	return `MATCH (seq:Sequence {key:'folder_id_sequence'})
-	CALL apoc.atomic.add(seq, 'value', 1, 5)
-	YIELD newValue as folder_id
-	CREATE (folder:Folder { id: folder_id, name: $folderName})
-	RETURN folder.id AS folderID`,
-		map[string]interface{}{
-			"folderName": folderName,
-		}
-}
-*/
-
 func updateFolderQuery(folderID int, folderName string) (string, map[string]interface{}) {
 	return `MATCH (folder:Folder {id: $folderID})
 	SET folder.name = $folderName`,
@@ -365,26 +505,6 @@ func updateFolderQuery(folderID int, folderName string) (string, map[string]inte
 			"folderName": folderName,
 		}
 }
-
-func updateFileQuery(fileId int, fileName string) (string, map[string]interface{}) {
-	return `MATCH (file:File {id: $fileId})
-	SET file.name = $fileName`,
-		map[string]interface{}{
-			"fileId":   fileId,
-			"fileName": fileName,
-		}
-}
-
-/*
-func moveFolderToRootFolderQuery(folderId int) (string, map[string]interface{}) {
-	return `MATCH (folder:Folder {id: $folderId})
-	OPTIONAL MATCH (folder)-[rel:IS_INSIDE]->()
-	DELETE rel`,
-		map[string]interface{}{
-			"folderId": folderId,
-		}
-}
-*/
 
 func moveFolderQuery(folderID int, destFolderID int) (string, map[string]interface{}) {
 	return `MATCH (folder:Folder {id: $folderID})
@@ -410,19 +530,8 @@ func moveFileQuery(fileID int, destFolderID int) (string, map[string]interface{}
 		}
 }
 
-/*
-func moveFileToRootFolderQuery(fileID int) (string, map[string]interface{}) {
-	return `MATCH (file:File {id: $fileID})
-	OPTIONAL MATCH (file)-[rel:IS_INSIDE]->()
-	DELETE rel`,
-		map[string]interface{}{
-			"fileID": fileID,
-		}
-}
-*/
-
-// Return the ids of all the deleted items?
-func deleteFolderContentQuery(folderID int) (string, map[string]interface{}) {
+// TODO: Return the ids of all the deleted items?
+func deleteFolderAndContentQuery(folderID int) (string, map[string]interface{}) {
 	return `OPTIONAL MATCH (f)-[:IS_INSIDE *1..]->(Folder {id: $folderID})
 	OPTIONAL MATCH (folder:Folder {id: $folderID})
 	DETACH DELETE f, folder`,
@@ -431,7 +540,7 @@ func deleteFolderContentQuery(folderID int) (string, map[string]interface{}) {
 		}
 }
 
-// Return the ids of all the deleted items?
+// TODO Return the ids of all the deleted items?
 func deleteFileQuery(fileID int) (string, map[string]interface{}) {
 	return `MATCH (file:File {id: $fileID})
 	DETACH DELETE file`,
@@ -440,344 +549,91 @@ func deleteFileQuery(fileID int) (string, map[string]interface{}) {
 		}
 }
 
-// InitDriver returns a valid driver
-// handles driver lifetime based on your application lifetime requirements  driver's lifetime is usually
-// bound by the application lifetime, which usually implies one driver instance per application
-func initDriver() neo4j.Driver {
-	// Neo4j 4.0, defaults to no TLS therefore use bolt:// or neo4j://
-	// Neo4j 3.5, defaults to self-signed certificates, TLS on, therefore use bolt+ssc:// or neo4j+ssc://
-	driver, err := neo4j.NewDriver(uri, neo4j.BasicAuth(username, password, ""))
-	if err != nil {
-		fmt.Println("Error on driver creation")
-		panic(err)
+func mapRecordToFile(record *neo4j.Record) (*File, error) {
+	file, found := record.Get(dbFile)
+	if !found {
+		return nil, errors.New("Could not find 'file' inside the File record")
+	}
+	fileProps := (file.(dbtype.Node)).Props
+
+	id, found := fileProps[dbId]
+	if !found {
+		return nil, errors.New("Could not retrieve 'id' of the file result")
+	}
+	name, found := fileProps[dbName]
+	if !found {
+		return nil, errors.New("Could not retrieve 'name' of the file result")
+	}
+	path, found := fileProps[dbPath]
+	if !found {
+		return nil, errors.New("Could not retrieve 'name' of the file result")
 	}
 
-	err = driver.VerifyConnectivity()
-	if err != nil {
-		fmt.Println("Error on driver connectivity check")
-		panic(err)
-	}
-
-	fmt.Println("Driver configuration OK")
-	return driver
+	return &File{
+		Id:   int(id.(int64)),
+		Name: name.(string),
+		Path: path.(string),
+	}, nil
 }
 
-func getDriver() neo4j.Driver {
-	if driver == nil {
-		d := initDriver()
-		driver = &d
-	}
+func mapResultToFiles(result neo4j.Result) (*[]File, error) {
+	var files []File
+	for result.Next() == true {
+		record := result.Record()
 
-	return *driver
-}
-
-func GetFile(fileID int) (*File, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
-	defer session.Close()
-
-	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		query, queryMap, mapResultToFileFn := getFileByID(fileID)
-		result, err := tx.Run(query, queryMap)
+		file, err := mapRecordToFile(record)
 		if err != nil {
-			fmt.Println("Error on transaction run")
 			return nil, err
 		}
-		return mapResultToFileFn(result)
-	})
 
+		files = append(files, *file)
+	}
+	return &files, nil
+}
+
+func mapRecordToFolder(record *neo4j.Record) (*Folder, error) {
+	folder, found := record.Get(dbFolder)
+	if !found {
+		return nil, errors.New("Could not find 'file' inside the Folder record")
+	}
+
+	folderProps := (folder.(dbtype.Node)).Props
+	id, found := folderProps[dbId]
+	if !found {
+		return nil, errors.New("Could not retrieve 'id' of the Folder record")
+	}
+	name, found := folderProps[dbName]
+	if !found {
+		return nil, errors.New("Could not retrieve 'name' of the Folder record")
+	}
+
+	return &Folder{
+		Id:   int(id.(int64)),
+		Name: name.(string),
+	}, nil
+}
+
+func mapRecordToFolderID(record *neo4j.Record) (*int, error) {
+	folder, err := mapRecordToFolder(record)
 	if err != nil {
-		fmt.Println("Transaction failure")
 		return nil, err
 	}
 
-	return result.(*File), nil
+	return &folder.Id, nil
 }
 
-func ExistsFile(fileID int) (*bool, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
-	defer session.Close()
+func mapResultToFolders(result neo4j.Result) (*[]Folder, error) {
+	var folders []Folder
 
-	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		query, queryMap, mapResultToExistFn := existsFileByID(fileID)
-		result, err := tx.Run(query, queryMap)
+	for result.Next() == true {
+		record := result.Record()
+		folder, err := mapRecordToFolder(record)
 		if err != nil {
-			fmt.Println("Error on transaction run")
-			return nil, err
-		}
-		return mapResultToExistFn(result)
-	})
-
-	if err != nil {
-		fmt.Println("Transaction failure")
-		return nil, err
-	}
-
-	return result.(*bool), nil
-}
-
-func GetFilesIn(folderID int) (*[]File, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
-	defer session.Close()
-
-	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		query, queryMap, mapResultToFilesFn := getFilesInFolderQuery(folderID)
-		result, err := tx.Run(query, queryMap)
-		if err != nil {
-			fmt.Println("Error on transaction run")
-			return nil, err
-		}
-		return mapResultToFilesFn(result)
-	})
-
-	if err != nil {
-		fmt.Println("Transaction failure")
-		return nil, err
-	}
-
-	return result.(*[]File), nil
-}
-
-func GetFolder(folderID int) (*Folder, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
-	defer session.Close()
-
-	fmt.Println("GetFolder: Gettign folder in %d", folderID)
-
-	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		query, queryMap, mapResultToFolderFn := getFolderByID(folderID)
-		result, err := tx.Run(query, queryMap)
-		if err != nil {
-			fmt.Println("Error on transaction run get folder")
-			return nil, err
-		}
-		return mapResultToFolderFn(result)
-	})
-
-	if err != nil {
-		fmt.Println("Transaction failure")
-		return nil, err
-	}
-
-	fmt.Println("Result from get folder")
-	fmt.Println("%v", result)
-	return result.(*Folder), nil
-}
-
-func GetRootFolderID() (*int, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
-	defer session.Close()
-
-	fmt.Println("GetFolder: Gettign root folder ID")
-
-	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		query, queryMap, mapResultToFolderIDFn := getRootFolderIDQuery()
-		result, err := tx.Run(query, queryMap)
-		if err != nil {
-			fmt.Println("Error on transaction run get root folder id")
-			return nil, err
-		}
-		return mapResultToFolderIDFn(result)
-	})
-
-	if err != nil {
-		fmt.Println("Transaction failure")
-		return nil, err
-	}
-
-	fmt.Println("Result from get root folder id")
-	fmt.Println("%v", result)
-	return result.(*int), nil
-}
-
-func IsRootFolder(folderID int) (*bool, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
-	defer session.Close()
-
-	fmt.Println("IsRootFolder")
-
-	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		query, queryMap, mapResultToIsRootFolderFn := isRootFolderQuery(folderID)
-		result, err := tx.Run(query, queryMap)
-		if err != nil {
-			fmt.Println("Error on transaction run is root folder")
-			return nil, err
-		}
-		return mapResultToIsRootFolderFn(result)
-	})
-
-	if err != nil {
-		fmt.Println("Transaction failure")
-		return nil, err
-	}
-
-	fmt.Println("Result from is root folder")
-	fmt.Println("%v", result)
-	return result.(*bool), nil
-}
-
-func ExistsFolder(folderID int) (*bool, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
-	defer session.Close()
-
-	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		query, queryMap, mapResultToExistFn := existsFolderByID(folderID)
-		result, err := tx.Run(query, queryMap)
-		if err != nil {
-			fmt.Println("Error on transaction run exists folder")
-			return nil, err
-		}
-		return mapResultToExistFn(result)
-	})
-
-	if err != nil {
-		fmt.Println("Transaction failure")
-		return nil, err
-	}
-
-	return result.(*bool), nil
-}
-
-func GetFoldersIn(folderID int) (*[]Folder, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
-	defer session.Close()
-
-	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		query, queryMap, mapResultToFoldersFn := getFoldersInFolderQuery(folderID)
-		result, err := tx.Run(query, queryMap)
-		if err != nil {
-			fmt.Println("Error on transaction run")
-			return nil, err
-		}
-		fmt.Println("Folder Result from neo4j:")
-		fmt.Println(result)
-		return mapResultToFoldersFn(result)
-	})
-
-	fmt.Println("Transaction went well")
-
-	if err != nil {
-		fmt.Println("Transaction failure")
-		return nil, err
-	}
-
-	fmt.Println("Here is the result of GetFoldersIn %+v:")
-	fmt.Println(result)
-	return result.(*[]Folder), nil
-}
-
-func CreateFile(fileName string, filePath string, folderParentID int) (*int, error) {
-	query, queryMap := createNewFileWithParentQuery(fileName, filePath, folderParentID)
-	return executeCreateQuery(getDriver())(query, queryMap)
-}
-
-func CreateFolder(folderName string, folderParentID int) (*int, error) {
-	query, queryMap := createNewFolderWithParentQuery(folderName, folderParentID)
-	return executeCreateQuery(getDriver())(query, queryMap)
-}
-
-func executeCreateQuery(driver neo4j.Driver) func(string, map[string]interface{}) (*int, error) {
-	return func(query string, queryMap map[string]interface{}) (*int, error) {
-		// Sessions are short-lived, cheap to create and NOT thread safe. Typically create one or more sessions
-		// per request in your web application. Make sure to call Close on the session when done.
-		// For multi-database support, set sessionConfig.DatabaseName to requested database
-		// Session config will default to write mode, if only reads are to be used configure session for
-		// read mode.
-		fmt.Println("About to create the session")
-		session := getDriver().NewSession(neo4j.SessionConfig{})
-		defer session.Close()
-
-		result, err := session.WriteTransaction(createItem(query, queryMap))
-		if err != nil {
-			fmt.Println("Transaction failure")
 			return nil, err
 		}
 
-		item := result.(*createdItem)
-		return &item.Id, nil
+		folders = append(folders, *folder)
 	}
-}
 
-func createItem(query string, queryMap map[string]interface{}) func(tx neo4j.Transaction) (interface{}, error) {
-	return func(tx neo4j.Transaction) (interface{}, error) {
-		result, err := tx.Run(query, queryMap)
-		// In face of driver native errors, make sure to return them directly.
-		// Depending on the error, the driver may try to execute the function again.
-		if err != nil {
-			fmt.Println("Create: error on transaction run")
-			return nil, err
-		}
-
-		record, err := result.Single()
-		if err != nil {
-			fmt.Println("error on single")
-			return nil, err
-		}
-
-		// You can also retrieve values by name, with e.g. `id, found := record.Get("n.id")`
-		return &createdItem{
-			Id: int(record.Values[0].(int64)),
-		}, nil
-	}
-}
-
-func updateItem(query string, queryMap map[string]interface{}) func(tx neo4j.Transaction) (interface{}, error) {
-	return func(tx neo4j.Transaction) (interface{}, error) {
-		result, err := tx.Run(query, queryMap)
-		fmt.Println("result:")
-		fmt.Println(result)
-		// In face of driver native errors, make sure to return them directly.
-		// Depending on the error, the driver may try to execute the function again.
-		if err != nil {
-			fmt.Println("Update: error on transaction run")
-			return nil, err
-		}
-
-		return nil, nil
-	}
-}
-
-func UpdateFolder(folderID int, folderName string) error {
-	query, queryMap := updateFolderQuery(folderID, folderName)
-	return executeUpdateQuery(getDriver())(query, queryMap)
-}
-
-func UpdateFile(fileID int, fileName string) error {
-	query, queryMap := updateFileQuery(fileID, fileName)
-	return executeUpdateQuery(getDriver())(query, queryMap)
-}
-
-func MoveFolder(folderID int, destFolderID int) error {
-	query, queryMap := moveFolderQuery(folderID, destFolderID)
-	return executeUpdateQuery(getDriver())(query, queryMap)
-}
-
-func MoveFile(fileID int, destFolderID int) error {
-	query, queryMap := moveFileQuery(fileID, destFolderID)
-	return executeUpdateQuery(getDriver())(query, queryMap)
-}
-
-func DeleteFolderContent(folderID int) error {
-	query, queryMap := deleteFolderContentQuery(folderID)
-	fmt.Println("just build deletd folder content query")
-	return executeUpdateQuery(getDriver())(query, queryMap)
-}
-
-func DeleteFile(folderID int) error {
-	query, queryMap := deleteFileQuery(folderID)
-	return executeUpdateQuery(getDriver())(query, queryMap)
-}
-
-func executeUpdateQuery(driver neo4j.Driver) func(string, map[string]interface{}) error {
-	return func(query string, queryMap map[string]interface{}) error {
-		// Sessions are short-lived, cheap to create and NOT thread safe. Typically create one or more sessions
-		// per request in your web application. Make sure to call Close on the session when done.
-		// For multi-database support, set sessionConfig.DatabaseName to requested database
-		// Session config will default to write mode, if only reads are to be used configure session for
-		// read mode.
-		session := getDriver().NewSession(neo4j.SessionConfig{})
-		defer session.Close()
-
-		_, err := session.WriteTransaction(updateItem(query, queryMap))
-		return err
-	}
+	return &folders, nil
 }
