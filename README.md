@@ -27,7 +27,8 @@ Inside /api: ```python3 integration_tests.tests```
 
 ### Requirements
 - Virtualbox 6.1
-- Vagrant 2.2+ (+sudo apt install libarchive-tools, otherwise might gett he following error on ```vagrant up```: "bsdtar not found...")
+- Vagrant 2.2+ (```sudo apt install libarchive-tools``` in case ```vagrant up``` lead to "bsdtar not found" error)
+- Ansible 2.10: ```python3 -m pip install --user ansible``` (+ansible lintere: ```pip install "ansible-lint[yamllint]```)
 
 ### Overview
 Components:

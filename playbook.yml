@@ -1,0 +1,8 @@
+---
+- name: ansible test
+  hosts: frontend
+  tasks:
+  - name: Add an hello world file
+    ansible.builtin.shell: echo Hello world done by Ansible! > ~/ansible-greetings.txt
+    args:
+      executable: /bin/bash

@@ -7,8 +7,6 @@ COPY package.json /usr/src/app
 COPY package-lock.json /usr/src/app
 RUN npm install
 COPY . /usr/src/app
-RUN npm run build
 
-# serve static content
 EXPOSE 5000
 CMD ["npm", "run", "start"]
