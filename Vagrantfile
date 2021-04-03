@@ -14,6 +14,7 @@ Vagrant.configure("2") do |config|
   # boxes at https://vagrantcloud.com/search.
   config.vm.define "frontend" do |frontend|
     config.vm.box = "hashicorp/bionic64"
+    config.vm.network "private_network", ip: "192.168.50.4"
   end
 
   # Disable automatic box update checking. If you disable this, then
