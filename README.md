@@ -28,7 +28,7 @@ Inside /api: ```python3 integration_tests.tests```
 ### Requirements
 - Virtualbox 6.1
 - Vagrant 2.2+ (```sudo apt install libarchive-tools``` in case ```vagrant up``` lead to "bsdtar not found" error)
-- Ansible 2.10: ```python3 -m pip install --user ansible``` (+ansible lintere: ```pip install "ansible-lint[yamllint]```)
+- Ansible 2.10: ```python3 -m pip install --user ansible``` (+ansible linter: ```pip install "ansible-lint[yamllint]```)
 
 ### Overview
 Components:
@@ -37,10 +37,16 @@ Components:
 - Neo4J database deployed on 1 VM (NON-dockerized app)
 
 ###
-Useful commands:
+Vagrant Useful commands:
 vagrant init hashicorp/bionic64 => creates the Vagrantfile
 vagrant up => start the machines defined in the Vagrantfile (and download them if not done yet. Around 300Mb!)
 vagrant ssh [name of a machine] => ssh into a machine [name]
+vagrant provision [name] => reprovision using ansible
+
+Docker useful commands:
+docker tag [image_id] my-registry/my-image:version
+docker save -o [output_file] my-registry/my-image:version
+docker load < [output_file] => registers image to the system
 
 ### TODO
 1. vagrant + virtualbox + ansible => deploy frontend it its own VM and expose it the traffic
