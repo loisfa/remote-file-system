@@ -193,6 +193,7 @@ func getRootFolderContent(w http.ResponseWriter, r *http.Request) {
 	id, err := fsservice.GetRootFolderID()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		fmt.Println(err)
 		return
 	}
 
@@ -213,6 +214,7 @@ func createFolder(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&folder)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		fmt.Println(err)
 		return
 	}
 
@@ -229,6 +231,7 @@ func createFolder(w http.ResponseWriter, r *http.Request) {
 	id, err := fsservice.CreateFolder(folder.Name, *destFolderId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		fmt.Println(err)
 		return
 	}
 

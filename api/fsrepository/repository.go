@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	uri      = "neo4j://localhost:7687"
+	uri      = "neo4j://192.168.50.5:7687"
 	username = "neo4j"
 	password = "password" // NB in theory should not commit
 

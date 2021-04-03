@@ -42,6 +42,8 @@ vagrant init hashicorp/bionic64 => creates the Vagrantfile
 vagrant up => start the machines defined in the Vagrantfile (and download them if not done yet. Around 300Mb!)
 vagrant ssh [name of a machine] => ssh into a machine [name]
 vagrant provision [name] => reprovision using ansible
+vagrant reload [name] => reload the vagrant config (network, etc.)
+grep MemTotal /proc/meminfo => get available memory on the machine
 
 Docker useful commands:
 docker tag [image_id] my-registry/my-image:version

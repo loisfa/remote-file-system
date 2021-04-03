@@ -1,6 +1,6 @@
 ---
 - name: Ansible test and play
-  hosts: frontend
+  hosts: neo4j
   become: true
   tasks:
   - name: install dependencies
