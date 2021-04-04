@@ -90,3 +90,7 @@ YIELD newValue as folder_id
 CREATE (folder:Folder { id: folder_id, name: '${folderName}' })
 RETURN folder.id AS folderId
 
+
+Perform regular backups:
+neo4j-admin dumps: https://neo4j.com/docs/operations-manual/current/backup-restore/offline-backup/
+ansible cron tasks: https://docs.ansible.com/ansible/latest/collections/ansible/builtin/cron_module.html

@@ -8,6 +8,8 @@ package fsrepository
 
 import (
 	"errors"
+	"fmt"
+	"os"
 
 	"github.com/loisfa/remote-file-system/api/fsmodel"
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
@@ -15,9 +17,15 @@ import (
 )
 
 const (
-	uri      = "neo4j://192.168.50.5:7687"
-	username = "neo4j"
-	password = "password" // NB in theory should not commit
+	NEO4J_HOST     = "NEO4J_HOST"
+	NEO4J_PORT     = "NEO4J_PORT"
+	NEO4J_USER     = "NEO4J_USER"
+	NEO4J_PASSWORD = "NEO4J_PASSWORD"
+
+	defaultHost     = "localhost"
+	defaultPort     = "7687"
+	defaultUser     = "neo4j"
+	defaultPassword = "password"
 
 	dbId     = "id"
 	dbName   = "name"
@@ -242,6 +250,32 @@ func CreateFolder(folderName string, folderParentID int) (*int, error) {
 // handles driver lifetime based on your application lifetime requirements  driver's lifetime is usually
 // bound by the application lifetime, which usually implies one driver instance per application
 func initDriver() neo4j.Driver {
+	host := os.Getenv(NEO4J_HOST)
+	if len(host) == 0 {
+		fmt.Printf("Could not find envirnment variable %s. Fallback to default '%s'\n", NEO4J_HOST, defaultHost)
+		host = defaultHost
+	}
+
+	port := os.Getenv(NEO4J_PORT)
+	if len(port) == 0 {
+		fmt.Printf("Could not find envirnment variable %s. Fallback to default '%s'\n", NEO4J_PORT, defaultPort)
+		port = defaultPort
+	}
+
+	username := os.Getenv(NEO4J_USER)
+	if len(username) == 0 {
+		fmt.Printf("Could not find envirnment variable %s. Fallback to default '%s'\n", NEO4J_USER, defaultUser)
+		username = defaultUser
+	}
+
+	password := os.Getenv(NEO4J_PASSWORD)
+	if len(password) == 0 {
+		fmt.Printf("Could not find envirnment variable %s. Fallback to default ******", NEO4J_PASSWORD)
+		password = defaultPassword
+	}
+
+	uri := fmt.Sprintf("neo4j://%s:%s", host, port)
+
 	// Neo4j 4.0, defaults to no TLS therefore use bolt:// or neo4j://
 	// Neo4j 3.5, defaults to self-signed certificates, TLS on, therefore use bolt+ssc:// or neo4j+ssc://
 	driver, err := neo4j.NewDriver(uri, neo4j.BasicAuth(username, password, ""))

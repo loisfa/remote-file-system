@@ -1,6 +1,6 @@
 ---
-- name: Ansible test and play
-  hosts: neo4j
+- name: install and start api
+  hosts: api
   become: true
   tasks:
   - name: install dependencies
@@ -35,20 +35,26 @@
       - docker-ce-cli
       - containerd.io
 
-  - name: Copy frontend docker image
+  - name: Copy api docker image
     ansible.builtin.copy:
-      src: ~/go/src/github.com/loisfa/remote-file-system/docker-images/frontend-1.0.0.tar
-      dest: ~/frontend-1.0.0.tar
+      src: ~/go/src/github.com/loisfa/remote-file-system/docker-images/api-1.0.0.tar
+      dest: ~/api-1.0.0.tar
       owner: vagrant
       group: vagrant
       mode: '0755'
 
   - name: Load the tar docker image file in docker image collection
-    ansible.builtin.shell: docker load < ~/frontend-1.0.0.tar
+    ansible.builtin.shell: docker load < ~/api-1.0.0.tar
     args:
       executable: /bin/bash
 
   - name: Run the docker image
-    ansible.builtin.shell: docker run -d -p 8080:5000 loisfa/frontend:1.0.0
+    ansible.builtin.shell: docker run -d \
+      -p 8080:8080 \
+      -e NEO4J_HOST='192.168.50.5' \
+      -e NEO4J_PORT='7687' \
+      -e NEO4J_USER='neo4j' \
+      -e NEO4J_PASSWORD='password' \
+      loisfa/api:1.0.0
     args:
       executable: /bin/bash

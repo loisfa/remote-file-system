@@ -62,9 +62,9 @@ func main() {
 		"Accept", "Accept-Language", "Content-Language", "Origin"})
 	methodsOk := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"})
 
-	http.ListenAndServe(":8080", handlers.CORS(corsObj, headersOk, methodsOk)(r))
+	fmt.Println("Server running on port 8080...")
 
-	fmt.Println("Server running on port 8080")
+	http.ListenAndServe(":8080", handlers.CORS(corsObj, headersOk, methodsOk)(r))
 }
 
 type ApiFolder struct {
