@@ -1,0 +1,177 @@
+---
+# Frontend server config
+- name: install and start frontend
+  hosts: frontend
+  become: true
+  tasks:
+  - name: install dependencies
+    apt:
+      name: "{{ item }}"
+      state: present
+      update_cache: true
+    loop:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg-agent
+      - software-properties-common
+
+  - name: add docker GPG apt key
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: add docker repository
+    apt_repository:
+      repo: deb https://download.docker.com/linux/ubuntu bionic stable
+      state: present
+
+  - name: install docker
+    apt:
+      name: "{{ item }}"
+      state: latest
+      # TODO should specify the version and not use latest
+      update_cache: true
+    loop:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+
+  - name: copy frontend .tar docker image on the server
+    ansible.builtin.copy:
+      src: ~/go/src/github.com/loisfa/remote-file-system/docker-images/frontend-1.0.0.tar
+      dest: ~/frontend-1.0.0.tar
+      owner: vagrant
+      group: vagrant
+      mode: '0755'
+
+  - name: load the .tar docker image file inside docker images
+    ansible.builtin.shell: docker load < ~/frontend-1.0.0.tar
+    args:
+      executable: /bin/bash
+
+  - name: creates the .env file
+    ansible.builtin.shell: printf "API_HOST=http://192.168.50.3\nAPI_PORT=8080\n" > ~/env 
+    # cannot use '.', not permitted by docker -v
+    args:
+      executable: /bin/bash
+
+  - name: run docker image
+    ansible.builtin.shell: docker run -d \
+      -p 8080:5000 \
+      -v ~/env:/app/.env  \
+      loisfa/frontend:1.0.0
+    args:
+      executable: /bin/bash
+
+# API server config
+- name: install and start api
+  hosts: api
+  become: true
+  tasks:
+  - name: install dependencies
+    apt:
+      name: "{{ item }}"
+      state: present
+      update_cache: true
+    loop:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg-agent
+      - software-properties-common
+
+  - name: add docker GPG apt key
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: add docker repository
+    apt_repository:
+      repo: deb https://download.docker.com/linux/ubuntu bionic stable
+      state: present
+
+  - name: install docker
+    apt:
+      name: "{{ item }}"
+      state: latest
+      # TODO should specify the version and not use latest
+      update_cache: true
+    loop:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+
+  - name: copy api docker image
+    ansible.builtin.copy:
+      src: ~/go/src/github.com/loisfa/remote-file-system/docker-images/api-1.0.0.tar
+      dest: ~/api-1.0.0.tar
+      owner: vagrant
+      group: vagrant
+      mode: '0755'
+
+  - name: Load the tar docker image file in docker image collection
+    ansible.builtin.shell: docker load < ~/api-1.0.0.tar
+    args:
+      executable: /bin/bash
+
+  - name: run docker image
+    ansible.builtin.shell: docker run -d \
+      -p 8080:8080 \
+      -e NEO4J_HOST='192.168.50.4' \
+      -e NEO4J_PORT='7687' \
+      -e NEO4J_USER='neo4j' \
+      -e NEO4J_PASSWORD='password' \
+      loisfa/api:1.0.0
+    args:
+      executable: /bin/bash
+
+# Neo4J DB server config
+- name: setup and start neo4j
+  hosts: neo4j
+  become: true
+  tasks:
+  - name: install JDK
+    apt: name="openjdk-11-jre" state=present update_cache=true
+
+  - name: add neo4j apt key
+    apt_key: url=http://debian.neo4j.org/neotechnology.gpg.key state=present
+
+  - name: set neo4j repository
+    apt_repository:
+      repo: deb http://debian.neo4j.com stable 4.1
+      state: present
+      update_cache: true
+
+  - name: enable universe repository
+    apt_repository:
+      repo: deb http://archive.ubuntu.com/ubuntu focal universe
+      state: present
+      update_cache: true
+
+  - name: install neo4j package
+    apt: name="neo4j=1:4.1.8" state=present update_cache=true force=true
+
+  - name: configure neo4j to enable external access
+    ansible.builtin.shell: sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf
+    args:
+      executable: /bin/bash
+
+  - name: download APOC as neo4j plugins
+    get_url:
+      url: https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.1.0.5/apoc-4.1.0.5-all.jar
+      dest: /var/lib/neo4j/plugins
+      checksum: md5:d03b8b8390fb61ec0a88cf8cb6bcc7e3
+      owner: neo4j
+      mode: '0644'
+
+  - name: configure neo4j password
+    # TODO rework on the password strategy
+    ansible.builtin.shell: neo4j-admin set-initial-password password
+    args:
+      executable: /bin/bash
+
+  - name: restart neo4j
+    ansible.builtin.systemd:
+      state: restarted
+      name: neo4j
