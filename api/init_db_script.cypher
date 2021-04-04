@@ -1,6 +1,5 @@
 // Scripts to be executed to initialize the database
-// From a bash run:
-// `cypher-shell -u <USER> -p <PASSWORD> < <THIS_SCRIPT>`
+// From a bash run: `cypher-shell -a <ADDRESS>:<PORT> -u <USER> -p <PASSWORD> -f <SCRIPT_FILE_PATH>`
 
 // Uniqueness constraint on file ids
 CREATE CONSTRAINT unique_file_id

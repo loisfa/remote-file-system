@@ -1,15 +1,15 @@
 ---
-- name: Ansible test and play
+- name: setup and start neo4j
   hosts: neo4j
   become: true
   tasks:
   - name: install JDK dependencies
     apt: name="openjdk-11-jre" state=present update_cache=yes
 
-  - name: add Neo4j apt key
+  - name: add neo4j apt key
     apt_key: url=http://debian.neo4j.org/neotechnology.gpg.key state=present
 
-  - name: set Neo4j repository
+  - name: set neo4j repository
     apt_repository: repo="deb http://debian.neo4j.com stable 4.1" state=present update_cache=yes
 
   - name: Make sure universe repository is enabled
@@ -21,12 +21,12 @@
   - name: install neo4j package
     apt: name="neo4j=1:4.1.8" state=present update_cache=yes force=yes
 
-  - name: Change neo4j conf file to enable external IP to access neo4j
+  - name: change neo4j.conf to enable external IP to access neo4j
     ansible.builtin.shell: sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf
     args:
       executable: /bin/bash
 
-  - name: Download apoc-4.1.0.5-all.jar
+  - name: download apoc as plugin
     get_url:
       url: https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.1.0.5/apoc-4.1.0.5-all.jar
       dest: /var/lib/neo4j/plugins
@@ -34,19 +34,13 @@
       owner: neo4j
       mode: '0644'
 
-  # - name: Enable APOC use in neo4j
-  #   ansible.builtin.shell: sudo sed -i 's/#dbms.security.procedures.whitelist=apoc.coll.*,apoc.load.*/#dbms.security.procedures.whitelist=apoc.coll.*,apoc.load.*,apoc.*/g' /etc/neo4j/neo4j.conf
-  #   args:
-  #     executable: /bin/bash
-
-  - name: Set the password for neo4j 
-    # TODO password strategy
+  - name: set neo4j password 
+    # TODO rework on the password strategy
     ansible.builtin.shell: neo4j-admin set-initial-password password
     args:
       executable: /bin/bash
 
-  # this seems seldom sufficient => needs an additional restart, find a way to trigger restart again on each config change
-  - name: Make sure a neo4j service is running
+  - name: restart neo4j
     ansible.builtin.systemd:
-      state: started
+      state: restarted
       name: neo4j
