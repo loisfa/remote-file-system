@@ -7,12 +7,39 @@ import (
 	"github.com/loisfa/remote-file-system/api/fsrepository"
 )
 
-func GetRootFolderID() (id *int, err error) {
-	return fsrepository.GetRootFolderID()
+type IFileSystemService interface {
+	GetRootFolderID() (*int, error)
+	GetFolder(folderID int) (*fsmodel.Folder, error)
+	ExistsFolder(folderID int) (*bool, error)
+	GetFile(fileID int) (*fsmodel.File, error)
+	GetFoldersIn(folderID int) (*[]fsmodel.Folder, error)
+	GetFilesIn(folderID int) (*[]fsmodel.File, error)
+	CreateFolder(name string, parentID int) (*int, error)
+	CreateFile(name string, path string, parentID int) (*int, error)
+	UpdateFolder(folderID int, name string) error
+	MoveFolder(folderID int, destFolderID int) error
+	MoveFile(fileID int, destFolderID int) error
+	DeleteFolderAndContent(folderID int) error
+	DeleteFile(fileID int) error
 }
 
-func GetFolder(folderID int) (*fsmodel.Folder, error) {
-	exists, err := fsrepository.ExistsFolder(folderID)
+type FileSystemService struct {
+	repo fsrepository.IFileSystemRepository
+}
+
+// could use a builder pattern?
+func NewFileSystemService() FileSystemService {
+	return FileSystemService{
+		repo: fsrepository.NewNeo4JFileSystemRepository(),
+	}
+}
+
+func (svc FileSystemService) GetRootFolderID() (id *int, err error) {
+	return svc.repo.GetRootFolderID()
+}
+
+func (svc FileSystemService) GetFolder(folderID int) (*fsmodel.Folder, error) {
+	exists, err := svc.repo.ExistsFolder(folderID)
 	if err != nil {
 		return nil, err
 	}
@@ -20,23 +47,23 @@ func GetFolder(folderID int) (*fsmodel.Folder, error) {
 		return nil, nil
 	}
 
-	folder, err := fsrepository.GetFolder(folderID)
+	folder, err := svc.repo.GetFolder(folderID)
 	if err != nil {
 		return nil, err
 	}
 	return folder, err
 }
 
-func ExistsFolder(folderID int) (*bool, error) {
-	return fsrepository.ExistsFolder(folderID)
+func (svc FileSystemService) ExistsFolder(folderID int) (*bool, error) {
+	return svc.repo.ExistsFolder(folderID)
 }
 
-func GetFile(fileID int) (*fsmodel.File, error) {
-	if exists, err := fsrepository.ExistsFile(fileID); err != nil || exists == nil || *exists == false {
+func (svc FileSystemService) GetFile(fileID int) (*fsmodel.File, error) {
+	if exists, err := svc.repo.ExistsFile(fileID); err != nil || exists == nil || *exists == false {
 		return nil, errors.New("The file does not exist. Cannot be fetched")
 	}
 
-	file, err := fsrepository.GetFile(fileID)
+	file, err := svc.repo.GetFile(fileID)
 	if err != nil {
 		return nil, err
 	}
@@ -49,64 +76,64 @@ func GetFile(fileID int) (*fsmodel.File, error) {
 }
 
 // TODO could have one single database call to return at the same time: currentFolder, folders, files
-func GetFoldersIn(folderID int) (*[]fsmodel.Folder, error) {
-	return fsrepository.GetFoldersIn(folderID)
+func (svc FileSystemService) GetFoldersIn(folderID int) (*[]fsmodel.Folder, error) {
+	return svc.repo.GetFoldersIn(folderID)
 }
 
-func GetFilesIn(folderID int) (*[]fsmodel.File, error) {
-	return fsrepository.GetFilesIn(folderID)
+func (svc FileSystemService) GetFilesIn(folderID int) (*[]fsmodel.File, error) {
+	return svc.repo.GetFilesIn(folderID)
 }
 
-func CreateFolder(name string, parentID int) (*int, error) {
-	return fsrepository.CreateFolder(name, parentID)
+func (svc FileSystemService) CreateFolder(name string, parentID int) (*int, error) {
+	return svc.repo.CreateFolder(name, parentID)
 }
 
-func CreateFile(name string, path string, parentID int) (*int, error) {
-	return fsrepository.CreateFile(name, path, parentID)
+func (svc FileSystemService) CreateFile(name string, path string, parentID int) (*int, error) {
+	return svc.repo.CreateFile(name, path, parentID)
 }
 
-func UpdateFolder(folderID int, name string) error {
-	return fsrepository.UpdateFolder(folderID, name)
+func (svc FileSystemService) UpdateFolder(folderID int, name string) error {
+	return svc.repo.UpdateFolder(folderID, name)
 }
 
-func MoveFolder(folderID int, destFolderID int) error {
-	if found, err := fsrepository.ExistsFolder(destFolderID); err != nil || found == nil || *found == false {
+func (svc FileSystemService) MoveFolder(folderID int, destFolderID int) error {
+	if found, err := svc.repo.ExistsFolder(destFolderID); err != nil || found == nil || *found == false {
 		return errors.New("The destination folder does not exist. Folder cannot be moved there.")
 	}
 
-	if found, err := fsrepository.ExistsFolder(folderID); err != nil || found == nil || *found == false {
+	if found, err := svc.repo.ExistsFolder(folderID); err != nil || found == nil || *found == false {
 		return errors.New("The folder was not found.")
 	}
 
-	if isRoot, err := fsrepository.IsRootFolder(folderID); err != nil || isRoot == nil || *isRoot == true {
+	if isRoot, err := svc.repo.IsRootFolder(folderID); err != nil || isRoot == nil || *isRoot == true {
 		return errors.New("Cannot perform 'Move' operation on the root folder")
 	}
 
-	return fsrepository.MoveFolder(folderID, destFolderID)
+	return svc.repo.MoveFolder(folderID, destFolderID)
 }
 
-func MoveFile(fileID int, destFolderID int) error {
-	if found, err := fsrepository.ExistsFolder(destFolderID); err != nil || found == nil || *found == false {
+func (svc FileSystemService) MoveFile(fileID int, destFolderID int) error {
+	if found, err := svc.repo.ExistsFolder(destFolderID); err != nil || found == nil || *found == false {
 		return errors.New("The destination folder does not exist. File cannot be moved there.")
 	}
-	return fsrepository.MoveFile(fileID, destFolderID)
+	return svc.repo.MoveFile(fileID, destFolderID)
 }
 
-func DeleteFolderAndContent(folderID int) error {
-	if found, err := fsrepository.ExistsFolder(folderID); err != nil || found == nil || *found == false {
+func (svc FileSystemService) DeleteFolderAndContent(folderID int) error {
+	if found, err := svc.repo.ExistsFolder(folderID); err != nil || found == nil || *found == false {
 		return errors.New("The folder does not exist. It cannot be deleted.")
 	}
 
-	if isRoot, err := fsrepository.IsRootFolder(folderID); err != nil || isRoot == nil || *isRoot == true {
+	if isRoot, err := svc.repo.IsRootFolder(folderID); err != nil || isRoot == nil || *isRoot == true {
 		return errors.New("Trying to delete the root folder. Operation not permitted")
 	}
 
-	return fsrepository.DeleteFolderAndContent(folderID)
+	return svc.repo.DeleteFolderAndContent(folderID)
 }
 
-func DeleteFile(fileID int) error {
-	if found, err := fsrepository.ExistsFile(fileID); err != nil || found == nil || *found == false {
+func (svc FileSystemService) DeleteFile(fileID int) error {
+	if found, err := svc.repo.ExistsFile(fileID); err != nil || found == nil || *found == false {
 		return errors.New("The file does not exist. It cannot be deleted.")
 	}
-	return fsrepository.DeleteFile(fileID)
+	return svc.repo.DeleteFile(fileID)
 }

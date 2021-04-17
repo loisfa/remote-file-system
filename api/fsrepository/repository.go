@@ -16,7 +16,13 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j/dbtype"
 )
 
+// Item can be a folder or a file
+type createdItem struct {
+	Id int
+}
+
 const (
+	// ment to be exposed? if not => TODO remove upper case,
 	NEO4J_HOST     = "NEO4J_HOST"
 	NEO4J_PORT     = "NEO4J_PORT"
 	NEO4J_USER     = "NEO4J_USER"
@@ -35,49 +41,61 @@ const (
 	dbExists = "exists"
 )
 
-// Item can be a folder or a file
-type createdItem struct {
-	Id int
+type IFileSystemRepository interface {
+	UpdateFolder(folderID int, folderName string) error
+	MoveFolder(folderID int, destFolderID int) error
+	MoveFile(fileID int, destFolderID int) error
+	DeleteFolderAndContent(folderID int) error
+	DeleteFile(folderID int) error
+	GetFile(fileID int) (*fsmodel.File, error)
+	ExistsFile(fileID int) (*bool, error)
+	GetFilesIn(folderID int) (*[]fsmodel.File, error)
+	GetFolder(folderID int) (*fsmodel.Folder, error)
+	GetRootFolderID() (*int, error)
+	IsRootFolder(folderID int) (*bool, error)
+	ExistsFolder(folderID int) (*bool, error)
+	GetFoldersIn(folderID int) (*[]fsmodel.Folder, error)
+	CreateFile(fileName string, filePath string, folderParentID int) (*int, error)
+	CreateFolder(folderName string, folderParentID int) (*int, error)
 }
 
-// Do not use the driver directly, please use the getDriver method
-var driver *neo4j.Driver
+type Neo4JFileSystemRepository struct {
+	driver neo4j.Driver
+}
 
-func getDriver() neo4j.Driver {
-	if driver == nil {
-		d := initDriver()
-		driver = &d
+func NewNeo4JFileSystemRepository() Neo4JFileSystemRepository {
+	return Neo4JFileSystemRepository{
+		driver: initDriver(),
 	}
-
-	return *driver
 }
 
-func UpdateFolder(folderID int, folderName string) error {
+func (repo Neo4JFileSystemRepository) UpdateFolder(folderID int, folderName string) error {
 	query, queryMap := updateFolderQuery(folderID, folderName)
-	return executeUpdateQuery(getDriver())(query, queryMap)
+	return executeUpdateQuery(repo.driver)(query, queryMap)
 }
-func MoveFolder(folderID int, destFolderID int) error {
+
+func (repo Neo4JFileSystemRepository) MoveFolder(folderID int, destFolderID int) error {
 	query, queryMap := moveFolderQuery(folderID, destFolderID)
-	return executeUpdateQuery(getDriver())(query, queryMap)
+	return executeUpdateQuery(repo.driver)(query, queryMap)
 }
 
-func MoveFile(fileID int, destFolderID int) error {
+func (repo Neo4JFileSystemRepository) MoveFile(fileID int, destFolderID int) error {
 	query, queryMap := moveFileQuery(fileID, destFolderID)
-	return executeUpdateQuery(getDriver())(query, queryMap)
+	return executeUpdateQuery(repo.driver)(query, queryMap)
 }
 
-func DeleteFolderAndContent(folderID int) error {
+func (repo Neo4JFileSystemRepository) DeleteFolderAndContent(folderID int) error {
 	query, queryMap := deleteFolderAndContentQuery(folderID)
-	return executeUpdateQuery(getDriver())(query, queryMap)
+	return executeUpdateQuery(repo.driver)(query, queryMap)
 }
 
-func DeleteFile(folderID int) error {
+func (repo Neo4JFileSystemRepository) DeleteFile(folderID int) error {
 	query, queryMap := deleteFileQuery(folderID)
-	return executeUpdateQuery(getDriver())(query, queryMap)
+	return executeUpdateQuery(repo.driver)(query, queryMap)
 }
 
-func GetFile(fileID int) (*fsmodel.File, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
+func (repo Neo4JFileSystemRepository) GetFile(fileID int) (*fsmodel.File, error) {
+	session := repo.driver.NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
@@ -96,8 +114,8 @@ func GetFile(fileID int) (*fsmodel.File, error) {
 	return result.(*fsmodel.File), nil
 }
 
-func ExistsFile(fileID int) (*bool, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
+func (repo Neo4JFileSystemRepository) ExistsFile(fileID int) (*bool, error) {
+	session := repo.driver.NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
@@ -116,8 +134,8 @@ func ExistsFile(fileID int) (*bool, error) {
 	return result.(*bool), nil
 }
 
-func GetFilesIn(folderID int) (*[]fsmodel.File, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
+func (repo Neo4JFileSystemRepository) GetFilesIn(folderID int) (*[]fsmodel.File, error) {
+	session := repo.driver.NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
@@ -136,8 +154,8 @@ func GetFilesIn(folderID int) (*[]fsmodel.File, error) {
 	return result.(*[]fsmodel.File), nil
 }
 
-func GetFolder(folderID int) (*fsmodel.Folder, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
+func (repo Neo4JFileSystemRepository) GetFolder(folderID int) (*fsmodel.Folder, error) {
+	session := repo.driver.NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
@@ -156,8 +174,8 @@ func GetFolder(folderID int) (*fsmodel.Folder, error) {
 	return result.(*fsmodel.Folder), nil
 }
 
-func GetRootFolderID() (*int, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
+func (repo Neo4JFileSystemRepository) GetRootFolderID() (*int, error) {
+	session := repo.driver.NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
@@ -176,8 +194,8 @@ func GetRootFolderID() (*int, error) {
 	return result.(*int), nil
 }
 
-func IsRootFolder(folderID int) (*bool, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
+func (repo Neo4JFileSystemRepository) IsRootFolder(folderID int) (*bool, error) {
+	session := repo.driver.NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
@@ -196,8 +214,8 @@ func IsRootFolder(folderID int) (*bool, error) {
 	return result.(*bool), nil
 }
 
-func ExistsFolder(folderID int) (*bool, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
+func (repo Neo4JFileSystemRepository) ExistsFolder(folderID int) (*bool, error) {
+	session := repo.driver.NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
@@ -216,8 +234,8 @@ func ExistsFolder(folderID int) (*bool, error) {
 	return result.(*bool), nil
 }
 
-func GetFoldersIn(folderID int) (*[]fsmodel.Folder, error) {
-	session := getDriver().NewSession(neo4j.SessionConfig{})
+func (repo Neo4JFileSystemRepository) GetFoldersIn(folderID int) (*[]fsmodel.Folder, error) {
+	session := repo.driver.NewSession(neo4j.SessionConfig{})
 	defer session.Close()
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
@@ -236,14 +254,14 @@ func GetFoldersIn(folderID int) (*[]fsmodel.Folder, error) {
 	return result.(*[]fsmodel.Folder), nil
 }
 
-func CreateFile(fileName string, filePath string, folderParentID int) (*int, error) {
+func (repo Neo4JFileSystemRepository) CreateFile(fileName string, filePath string, folderParentID int) (*int, error) {
 	query, queryMap := createNewFileWithParentQuery(fileName, filePath, folderParentID)
-	return executeCreateQuery(getDriver())(query, queryMap)
+	return executeCreateQuery(repo.driver)(query, queryMap)
 }
 
-func CreateFolder(folderName string, folderParentID int) (*int, error) {
+func (repo Neo4JFileSystemRepository) CreateFolder(folderName string, folderParentID int) (*int, error) {
 	query, queryMap := createNewFolderWithParentQuery(folderName, folderParentID)
-	return executeCreateQuery(getDriver())(query, queryMap)
+	return executeCreateQuery(repo.driver)(query, queryMap)
 }
 
 // InitDriver returns a valid driver
@@ -270,7 +288,7 @@ func initDriver() neo4j.Driver {
 
 	password := os.Getenv(NEO4J_PASSWORD)
 	if len(password) == 0 {
-		fmt.Printf("Could not find envirnment variable %s. Fallback to default ******", NEO4J_PASSWORD)
+		fmt.Printf("Could not find envirnment variable %s. Fallback to default ******\n", NEO4J_PASSWORD)
 		password = defaultPassword
 	}
 
@@ -298,7 +316,7 @@ func executeCreateQuery(driver neo4j.Driver) func(string, map[string]interface{}
 		// For multi-database support, set sessionConfig.DatabaseName to requested database
 		// Session config will default to write mode, if only reads are to be used configure session for
 		// read mode.
-		session := getDriver().NewSession(neo4j.SessionConfig{})
+		session := driver.NewSession(neo4j.SessionConfig{})
 		defer session.Close()
 
 		result, err := session.WriteTransaction(createItem(query, queryMap))
@@ -352,7 +370,7 @@ func executeUpdateQuery(driver neo4j.Driver) func(string, map[string]interface{}
 		// For multi-database support, set sessionConfig.DatabaseName to requested database
 		// Session config will default to write mode, if only reads are to be used configure session for
 		// read mode.
-		session := getDriver().NewSession(neo4j.SessionConfig{})
+		session := driver.NewSession(neo4j.SessionConfig{})
 		defer session.Close()
 
 		_, err := session.WriteTransaction(updateItem(query, queryMap))

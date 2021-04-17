@@ -18,7 +18,11 @@ import (
 // https://itnext.io/golang-error-handling-best-practice-a36f47b0b94c
 // TODO: do not expose the database errors, to be rewritten with message
 
+var svc fsservice.IFileSystemService
+
 func main() {
+	svc = fsservice.NewFileSystemService()
+
 	r := mux.NewRouter()
 
 	r.HandleFunc("/health-check", healthCheckStatusOK).Methods(http.MethodGet)
@@ -85,17 +89,17 @@ type ApiFolderContent struct {
 }
 
 func getContentIn(folderId int) (*ApiFolderContent, error) {
-	currentFolder, err := fsservice.GetFolder(folderId)
+	currentFolder, err := svc.GetFolder(folderId)
 	if err != nil {
 		return nil, err
 	}
 
-	subFolders, err := fsservice.GetFoldersIn(folderId)
+	subFolders, err := svc.GetFoldersIn(folderId)
 	if err != nil {
 		return nil, err
 	}
 
-	files, err := fsservice.GetFilesIn(folderId)
+	files, err := svc.GetFilesIn(folderId)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +148,7 @@ func serveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := fsservice.GetFile(fileId)
+	file, err := svc.GetFile(fileId)
 	if file == nil {
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
@@ -165,7 +169,7 @@ func getFolderContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	found, err := fsservice.ExistsFolder(folderId)
+	found, err := svc.ExistsFolder(folderId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -190,7 +194,7 @@ func getFolderContent(w http.ResponseWriter, r *http.Request) {
 }
 
 func getRootFolderContent(w http.ResponseWriter, r *http.Request) {
-	id, err := fsservice.GetRootFolderID()
+	id, err := svc.GetRootFolderID()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		fmt.Println(err)
@@ -223,12 +227,12 @@ func createFolder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Create folder: missing destination folder id", http.StatusBadRequest)
 		return
 	}
-	if exists, err := fsservice.ExistsFolder(*destFolderId); err != nil || exists == nil || !*exists {
+	if exists, err := svc.ExistsFolder(*destFolderId); err != nil || exists == nil || !*exists {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	id, err := fsservice.CreateFolder(folder.Name, *destFolderId)
+	id, err := svc.CreateFolder(folder.Name, *destFolderId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		fmt.Println(err)
@@ -259,7 +263,7 @@ func updateFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = fsservice.UpdateFolder(*id, f.Name)
+	err = svc.UpdateFolder(*id, f.Name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -281,7 +285,7 @@ func deleteFolderAndContent(w http.ResponseWriter, r *http.Request) {
 	}
 	id = &idInt
 
-	err = fsservice.DeleteFolderAndContent(*id)
+	err = svc.DeleteFolderAndContent(*id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -308,7 +312,7 @@ func moveFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = fsservice.MoveFolder(folderId, destFolderIdInt)
+	err = svc.MoveFolder(folderId, destFolderIdInt)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -330,7 +334,7 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	id = &idInt
 
-	err = fsservice.DeleteFile(*id)
+	err = svc.DeleteFile(*id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -357,7 +361,7 @@ func moveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = fsservice.MoveFile(fileId, destFolderIdInt)
+	err = svc.MoveFile(fileId, destFolderIdInt)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -406,7 +410,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 
 	tempFile.Write(fileBytes)
 
-	fileId, err := fsservice.CreateFile(handler.Filename, tempFile.Name(), destFolderId)
+	fileId, err := svc.CreateFile(handler.Filename, tempFile.Name(), destFolderId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
