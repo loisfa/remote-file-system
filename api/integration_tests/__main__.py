@@ -70,7 +70,7 @@ assert body['currentFolder']['name'] == "Folder 1.1", "The name of the folder ju
 ### MOVE FOLDER
 # Ensure cannot move root folder
 response = session.put(ROOT_URL + "/MoveFolder/" + str(root_folder_id) + "?dest=" + str(created_folder_id))
-assert response.status_code == 500, "Wrong http code received on move folder: " + str(response.status_code)
+assert response.status_code == 400, "Wrong http code received on move folder: " + str(response.status_code)
 # Create folder 2 in the root
 to_create_folder_2 = CreateFolderDTO("Folder 2", int(root_folder_id))
 response = session.post(ROOT_URL + "/folders", to_create_folder_2.toJson())

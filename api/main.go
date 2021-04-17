@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
 
 	"github.com/loisfa/remote-file-system/api/fsmodel"
 	"github.com/loisfa/remote-file-system/api/fsservice"
@@ -42,7 +43,7 @@ func main() {
 
 	r.HandleFunc("/MoveFolder/{folderId:[0-9]+}", moveFolder).Queries("dest", "{destFolderId:[0-9]+}").Methods(http.MethodPut)
 
-	// TODO: download selected folder as a .zip
+	// TODO: download selected folder as a .zip?
 
 	/*
 	 * FILES
@@ -149,8 +150,16 @@ func serveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	file, err := svc.GetFile(fileId)
-	if file == nil {
-		http.Error(w, "File not found", http.StatusNotFound)
+	if err != nil {
+		errorCode := errors.Cause(err).Error()
+		if errorCode == fsservice.NotFound {
+			errorMsg := fmt.Sprintf("Could not find file with id %d when trying to get file", fileId)
+			fmt.Println(err, errorMsg)
+			http.Error(w, errorMsg, http.StatusNotFound)
+		} else {
+			fmt.Println(err, fmt.Sprintf("Error when trying to get file %d.", fileId))
+			http.Error(w, "", mapServiceErrorToHttpStatus(err))
+		}
 		return
 	}
 
@@ -165,26 +174,23 @@ func getFolderContent(w http.ResponseWriter, r *http.Request) {
 	idStr := vars["folderId"]
 	var err error
 	if folderId, err = strconv.Atoi(idStr); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	found, err := svc.ExistsFolder(folderId)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-	if found == nil || *found == false {
-		http.Error(w, "Folder not found. Cannot retrieve its content", http.StatusNotFound)
+		errMsg := fmt.Sprintf("Could not parse integer 'folderId' when trying to get folder content. folderId: %s", idStr)
+		fmt.Println(err, errMsg)
+		http.Error(w, errMsg, http.StatusBadRequest)
 		return
 	}
 
 	apiFolderContent, err := getContentIn(folderId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if apiFolderContent == nil {
-		http.Error(w, "Folder not found. Cannot retrieve its content", http.StatusNotFound)
+		errorCode := errors.Cause(err).Error()
+		if errorCode == fsservice.NotFound {
+			errorMsg := fmt.Sprintf("Could not find folder with id %d when trying to get folder content.", folderId)
+			fmt.Println(err, errorMsg)
+			http.Error(w, errorMsg, http.StatusNotFound)
+		} else {
+			fmt.Println(err, fmt.Sprintf("Error when trying to get folder %d.", folderId))
+			http.Error(w, "", mapServiceErrorToHttpStatus(err))
+		}
 		return
 	}
 
@@ -193,18 +199,26 @@ func getFolderContent(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(apiFolderContent)
 }
 
+// TODO see how this function can be factorized with the one just above
 func getRootFolderContent(w http.ResponseWriter, r *http.Request) {
-	id, err := svc.GetRootFolderID()
+	folderId, err := svc.GetRootFolderID()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		fmt.Println(err)
 		return
 	}
 
-	apiFolderContent, err := getContentIn(*id)
-
+	apiFolderContent, err := getContentIn(*folderId)
 	if err != nil {
-		http.Error(w, "Folder not found. Cannot retrieve its content", http.StatusNotFound)
+		errorCode := errors.Cause(err).Error()
+		if errorCode == fsservice.NotFound {
+			errorMsg := fmt.Sprintf("Could not find folder with id %d when trying to get root folder content.", folderId)
+			fmt.Println(err, errorMsg)
+			http.Error(w, errorMsg, http.StatusNotFound)
+		} else {
+			fmt.Println(err, fmt.Sprintf("Error when trying to get root folder content %d.", folderId))
+			http.Error(w, "", mapServiceErrorToHttpStatus(err))
+		}
 		return
 	}
 
@@ -227,15 +241,11 @@ func createFolder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Create folder: missing destination folder id", http.StatusBadRequest)
 		return
 	}
-	if exists, err := svc.ExistsFolder(*destFolderId); err != nil || exists == nil || !*exists {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 
 	id, err := svc.CreateFolder(folder.Name, *destFolderId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		fmt.Println(err)
+		fmt.Println(err, fmt.Sprintf("Error when trying to create folder named %s inside folder %d.", folder.Name, *destFolderId))
+		http.Error(w, "", mapServiceErrorToHttpStatus(err))
 		return
 	}
 
@@ -246,7 +256,7 @@ func createFolder(w http.ResponseWriter, r *http.Request) {
 func updateFolder(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
-	var id *int
+	var folderId *int
 	var idInt int
 	var err error
 	idStr := vars["folderId"]
@@ -254,7 +264,7 @@ func updateFolder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	id = &idInt
+	folderId = &idInt
 
 	var f ApiFolder
 	err = json.NewDecoder(r.Body).Decode(&f)
@@ -263,9 +273,17 @@ func updateFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = svc.UpdateFolder(*id, f.Name)
+	err = svc.UpdateFolder(*folderId, f.Name)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		errorCode := errors.Cause(err).Error()
+		if errorCode == fsservice.NotFound {
+			errorMsg := fmt.Sprintf("Could not find folder %d when trying to update the folder.", folderId)
+			fmt.Println(err, errorMsg)
+			http.Error(w, errorMsg, http.StatusNotFound)
+		} else {
+			fmt.Println(err, fmt.Sprintf("Error when trying to update folder %d.", folderId))
+			http.Error(w, "", mapServiceErrorToHttpStatus(err))
+		}
 		return
 	}
 
@@ -275,7 +293,7 @@ func updateFolder(w http.ResponseWriter, r *http.Request) {
 func deleteFolderAndContent(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
-	var id *int
+	var folderId *int
 	var idInt int
 	var err error
 	idStr := vars["folderId"]
@@ -283,11 +301,19 @@ func deleteFolderAndContent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	id = &idInt
+	folderId = &idInt
 
-	err = svc.DeleteFolderAndContent(*id)
+	err = svc.DeleteFolderAndContent(*folderId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		errorCode := errors.Cause(err).Error()
+		if errorCode == fsservice.NotFound {
+			errorMsg := fmt.Sprintf("Could not find folder %d when trying to delete the folder.", folderId)
+			fmt.Println(err, errorMsg)
+			http.Error(w, errorMsg, http.StatusNotFound)
+		} else {
+			fmt.Println(err, fmt.Sprintf("Error when trying to delete folder %d.", folderId))
+			http.Error(w, "", mapServiceErrorToHttpStatus(err))
+		}
 		return
 	}
 
@@ -305,16 +331,17 @@ func moveFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var destFolderIdInt int
+	var destFolderId int
 	destFolderIdStr := vars["destFolderId"]
-	if destFolderIdInt, err = strconv.Atoi(destFolderIdStr); err != nil {
+	if destFolderId, err = strconv.Atoi(destFolderIdStr); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	err = svc.MoveFolder(folderId, destFolderIdInt)
+	err = svc.MoveFolder(folderId, destFolderId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		fmt.Println(err, fmt.Sprintf("Error when trying to move folder %d inside folder %d.", folderId, destFolderId))
+		http.Error(w, "", mapServiceErrorToHttpStatus(err))
 		return
 	}
 
@@ -324,7 +351,7 @@ func moveFolder(w http.ResponseWriter, r *http.Request) {
 func deleteFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
-	var id *int
+	var fileId *int
 	var idInt int
 	var err error
 	idStr := vars["fileId"]
@@ -332,11 +359,19 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	id = &idInt
+	fileId = &idInt
 
-	err = svc.DeleteFile(*id)
+	err = svc.DeleteFile(*fileId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		errorCode := errors.Cause(err).Error()
+		if errorCode == fsservice.NotFound {
+			errorMsg := fmt.Sprintf("Could not find file %d when trying to delete the file.", fileId)
+			fmt.Println(err, errorMsg)
+			http.Error(w, errorMsg, http.StatusNotFound)
+		} else {
+			fmt.Println(err, fmt.Sprintf("Error when trying to delete file %d.", fileId))
+			http.Error(w, "", mapServiceErrorToHttpStatus(err))
+		}
 		return
 	}
 
@@ -354,16 +389,17 @@ func moveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var destFolderIdInt int
+	var destFolderId int
 	destFolderIdStr := vars["destFolderId"]
-	if destFolderIdInt, err = strconv.Atoi(destFolderIdStr); err != nil {
+	if destFolderId, err = strconv.Atoi(destFolderIdStr); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	err = svc.MoveFile(fileId, destFolderIdInt)
+	err = svc.MoveFile(fileId, destFolderId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		fmt.Println(err, fmt.Sprintf("Error when trying to move file %d inside folder %d.", fileId, destFolderId))
+		http.Error(w, "", mapServiceErrorToHttpStatus(err))
 		return
 	}
 
@@ -412,7 +448,8 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 
 	fileId, err := svc.CreateFile(handler.Filename, tempFile.Name(), destFolderId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		fmt.Println(err, fmt.Sprintf("Error when trying to create file named %s inside folder %d.", handler.Filename, destFolderId))
+		http.Error(w, "", mapServiceErrorToHttpStatus(err))
 		return
 	}
 
@@ -422,4 +459,19 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 
 func healthCheckStatusOK(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+	fmt.Println("Received request on health check. Sent back OK.")
+}
+
+func mapServiceErrorToHttpStatus(svcError error) int {
+	errorCode := errors.Cause(svcError).Error()
+	switch errorCode {
+	case fsservice.NotFound:
+		return http.StatusNotFound
+	case fsservice.BadRequest:
+		return http.StatusBadRequest
+	case fsservice.IllegalOperation:
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
 }
